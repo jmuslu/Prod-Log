@@ -42,8 +42,15 @@ extension Color: Codable {
     
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        var r, g, b, a: CGFloat
-        UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
+        let (r, g, b, a): (CGFloat, CGFloat, CGFloat, CGFloat) = {
+            var r: CGFloat = 0
+            var g: CGFloat = 0
+            var b: CGFloat = 0
+            var a: CGFloat = 0
+            UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
+            return (r, g, b, a)
+        }()
+        
         try container.encode(r, forKey: .red)
         try container.encode(g, forKey: .green)
         try container.encode(b, forKey: .blue)
