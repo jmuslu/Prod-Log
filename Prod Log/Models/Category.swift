@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct Category: Identifiable, Codable {
+struct Category: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String
     var color: Color
@@ -14,6 +14,15 @@ struct Category: Identifiable, Codable {
         Category(name: "Work", color: .orange, pointsPerMinute: 5, isDefault: true),
         Category(name: "Relax", color: .teal, pointsPerMinute: 5, isDefault: true)
     ]
+    
+    // Implement Hashable
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    
+    static func == (lhs: Category, rhs: Category) -> Bool {
+        lhs.id == rhs.id
+    }
 }
 
 // Extension to handle Color coding
