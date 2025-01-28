@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		7CA399AD2D4944FA00F855E9 /* Dev[Prod_Log]Test.mobileprovision in Resources */ = {isa = PBXBuildFile; fileRef = 7CA399AC2D4944FA00F855E9 /* Dev[Prod_Log]Test.mobileprovision */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		7C9F16162D48217A00C0E057 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +31,7 @@
 		7C9F16012D48217700C0E057 /* Prod Log.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Prod Log.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7C9F16152D48217A00C0E057 /* Prod LogTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Prod LogTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7C9F161F2D48217A00C0E057 /* Prod LogUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Prod LogUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		7CA399AC2D4944FA00F855E9 /* Dev[Prod_Log]Test.mobileprovision */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Dev[Prod_Log]Test.mobileprovision"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -92,6 +97,7 @@
 				7C9F16182D48217A00C0E057 /* Prod LogTests */,
 				7C9F16222D48217A00C0E057 /* Prod LogUITests */,
 				7C9F16022D48217700C0E057 /* Products */,
+				7CA399AC2D4944FA00F855E9 /* Dev[Prod_Log]Test.mobileprovision */,
 			);
 			sourceTree = "<group>";
 		};
@@ -225,6 +231,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7CA399AD2D4944FA00F855E9 /* Dev[Prod_Log]Test.mobileprovision in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
