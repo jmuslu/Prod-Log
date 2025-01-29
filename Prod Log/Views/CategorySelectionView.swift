@@ -15,36 +15,30 @@ struct CategorySelectionView: View {
     var body: some View {
         NavigationView {
             VStack {
-                Text(timeSlotText)
-                    .font(.headline)
-                    .foregroundColor(.primary)
+                // Time slot header
+                HeaderView(timeSlotText: timeSlotText)
                 
+                // Pie chart
                 PieChartView(data: categoryPercentages)
                     .frame(height: 200)
                     .padding()
                 
-                List {
-                    Text("Total: \(Int(totalPercentage))%")
-                        .font(.headline)
-                        .foregroundColor(totalPercentage == 100 ? .green : .red)
-                    
-                    ForEach(activeCategories) { category in
-                        CategoryRowView(
-                            category: category,
-                            percentage: categoryPercentages[category] ?? 0,
-                            isExpanded: expandedCategory == category,
-                            onTap: { toggleCategory(category) },
-                            onSliderChange: { updatePercentage(for: category, value: $0) }
-                        )
-                    }
-                }
+                // Category list
+                CategoryListView(
+                    totalPercentage: totalPercentage,
+                    activeCategories: activeCategories,
+                    categoryPercentages: categoryPercentages,
+                    expandedCategory: expandedCategory,
+                    onToggle: toggleCategory,
+                    onPercentageChange: updatePercentage
+                )
             }
             .navigationTitle("Log Activities")
             .navigationBarItems(
-                trailing: Button("Save") {
-                    saveCategories()
-                }
-                .disabled(totalPercentage != 100)
+                trailing: SaveButton(
+                    isEnabled: totalPercentage == 100,
+                    action: saveCategories
+                )
             )
         }
         .onAppear {
@@ -99,5 +93,53 @@ struct CategorySelectionView: View {
             settingsManager.savePoints(points, for: updatedCard.startTime, categories: categoryPercentages)
         }
         dismiss()
+    }
+}
+
+// Break out sub-views
+private struct HeaderView: View {
+    let timeSlotText: String
+    
+    var body: some View {
+        Text(timeSlotText)
+            .font(.headline)
+            .foregroundColor(.primary)
+    }
+}
+
+private struct SaveButton: View {
+    let isEnabled: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button("Save", action: action)
+            .disabled(!isEnabled)
+    }
+}
+
+private struct CategoryListView: View {
+    let totalPercentage: Double
+    let activeCategories: [Category]
+    let categoryPercentages: [Category: Double]
+    let expandedCategory: Category?
+    let onToggle: (Category) -> Void
+    let onPercentageChange: (Category, Double) -> Void
+    
+    var body: some View {
+        List {
+            Text("Total: \(Int(totalPercentage))%")
+                .font(.headline)
+                .foregroundColor(totalPercentage == 100 ? .green : .red)
+            
+            ForEach(activeCategories) { category in
+                CategoryRowView(
+                    category: category,
+                    percentage: categoryPercentages[category] ?? 0,
+                    isExpanded: expandedCategory == category,
+                    onTap: { onToggle(category) },
+                    onSliderChange: { onPercentageChange(category, $0) }
+                )
+            }
+        }
     }
 } 

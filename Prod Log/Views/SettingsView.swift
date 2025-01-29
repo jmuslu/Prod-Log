@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject var settingsManager: SettingsManager
     @State private var showingCategorySheet = false
     @State private var editingCategory: Category?
+    @State private var showingResetAlert = false
     
     var body: some View {
         NavigationView {
@@ -40,10 +41,32 @@ struct SettingsView: View {
                         Label("Add Category", systemImage: "plus")
                     }
                 }
+                
+                Section {
+                    Button(action: {
+                        showingResetAlert = true
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.counterclockwise")
+                                .foregroundColor(.red)
+                            Text("Reset Today's Logs")
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
             }
             .navigationTitle("Settings")
             .sheet(isPresented: $showingCategorySheet) {
                 CategoryEditSheet(category: editingCategory)
+            }
+            .alert("Reset Today's Logs", isPresented: $showingResetAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Reset", role: .destructive) {
+                    settingsManager.resetTodayPoints()
+                    NotificationCenter.default.post(name: .resetLogCards, object: nil)
+                }
+            } message: {
+                Text("This will clear all logged activities for today. This action cannot be undone.")
             }
         }
     }
@@ -138,34 +161,22 @@ struct TimelineMarker: View {
 }
 
 struct CategoryEditSheet: View {
+    let category: Category?
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var settingsManager: SettingsManager
-    
-    let category: Category?
-    
     @State private var name: String = ""
     @State private var color: Color = .blue
-    @State private var pointsPerMinute: Double = 5.0
-    
-    init(category: Category?) {
-        self.category = category
-        _name = State(initialValue: category?.name ?? "")
-        _color = State(initialValue: category?.color ?? .blue)
-        _pointsPerMinute = State(initialValue: category?.pointsPerMinute ?? 5.0)
-    }
+    @State private var pointsPerMinute: Double = 1.0
     
     var body: some View {
         NavigationView {
             Form {
-                Section {
-                    TextField("Category Name", text: $name)
-                    
-                    ColorPicker("Color", selection: $color)
-                    
-                    VStack(alignment: .leading) {
-                        Text("Points per Minute: \(Int(pointsPerMinute))")
-                        Slider(value: $pointsPerMinute, in: 1...20, step: 1)
-                    }
+                TextField("Category Name", text: $name)
+                
+                ColorPicker("Color", selection: $color)
+                
+                Stepper(value: $pointsPerMinute, in: 0.5...10.0, step: 0.5) {
+                    Text("Points per minute: \(pointsPerMinute, specifier: "%.1f")")
                 }
             }
             .navigationTitle(category == nil ? "New Category" : "Edit Category")
@@ -184,13 +195,35 @@ struct CategoryEditSheet: View {
                 }
             }
         }
+        .onAppear {
+            if let category = category {
+                name = category.name
+                color = category.color
+                pointsPerMinute = category.pointsPerMinute
+            }
+        }
     }
     
     private func saveCategory() {
         if let existingCategory = category {
-            settingsManager.updateCategory(existingCategory, name: name, color: color, pointsPerMinute: pointsPerMinute)
+            // Create updated category
+            let updatedCategory = Category(
+                id: existingCategory.id,
+                name: name,
+                color: color,
+                pointsPerMinute: pointsPerMinute,
+                isDefault: existingCategory.isDefault,
+                deletedDate: existingCategory.deletedDate
+            )
+            settingsManager.updateCategory(updatedCategory)
         } else {
-            settingsManager.addCategory(name: name, color: color, pointsPerMinute: pointsPerMinute)
+            let newCategory = Category(
+                name: name,
+                color: color,
+                pointsPerMinute: pointsPerMinute,
+                isDefault: false
+            )
+            settingsManager.addCategory(newCategory)
         }
     }
 }

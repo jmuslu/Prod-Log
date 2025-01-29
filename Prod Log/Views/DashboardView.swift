@@ -28,7 +28,6 @@ struct WeeklyPointsCard: View {
     var totalPoints: Int {
         let calendar = Calendar.current
         let today = Date()
-        let weekAgo = calendar.date(byAdding: .day, value: -7, to: today)!
         
         return (0...6).reduce(0) { total, daysAgo in
             let date = calendar.date(byAdding: .day, value: -daysAgo, to: today)!

@@ -8,6 +8,20 @@ class SettingsManager: ObservableObject {
     
     let availableIntervals = [1.0, 2.0, 3.0, 4.0, 6.0, 12.0]
     
+    // Create a struct to handle time slot encoding/decoding
+    private struct TimeSlot: Codable {
+        let start: Date
+        let end: Date
+        
+        init(start: Date, end: Date) {
+            self.start = start
+            self.end = end
+        }
+    }
+    
+    @Published private var loggedTimeSlots: [TimeSlot] = []
+    @Published private var completedCards: [LogCard] = []
+    
     init() {
         // Initialize all stored properties first
         self.categories = []
@@ -25,17 +39,18 @@ class SettingsManager: ObservableObject {
         loadCategories()
         loadDailyPoints()
         loadCategoryPoints()
+        loadLoggedTimeSlots()
+        loadCompletedCards()
     }
     
     func getNextTimeSlot() -> Date {
         let calendar = Calendar.current
         let now = Date()
         let currentHour = calendar.component(.hour, from: now)
-        let currentMinute = calendar.component(.minute, from: now)
         let intervalHours = Int(timeInterval)
         
-        // Calculate the next slot start time
-        var nextSlotHour = ((currentHour / intervalHours) + 1) * intervalHours
+        // Change to let since it's not mutated
+        let nextSlotHour = ((currentHour / intervalHours) + 1) * intervalHours
         
         // If we're in the last slot of the day
         if nextSlotHour >= 24 {
@@ -178,33 +193,18 @@ class SettingsManager: ObservableObject {
             .reduce(0) { $0 + calculatePoints(for: $1) }
     }
     
-    func updateCategory(_ category: Category, name: String, color: Color, pointsPerMinute: Double) {
+    func updateCategory(_ category: Category) {
         if let index = categories.firstIndex(where: { $0.id == category.id }) {
-            let updatedCategory = Category(
-                id: category.id,
-                name: name,
-                color: color,
-                pointsPerMinute: pointsPerMinute,
-                isDefault: category.isDefault
-            )
-            
-            // Update category in the list
-            categories[index] = updatedCategory
-            
-            // Update points data with the new category
-            for (date, points) in categoryPoints {
-                if let value = points[category] {
-                    var updatedPoints = points
-                    updatedPoints.removeValue(forKey: category)
-                    updatedPoints[updatedCategory] = value
-                    categoryPoints[date] = updatedPoints
-                }
-            }
-            
+            categories[index] = category
             saveCategories()
-            saveCategoryPoints()
             objectWillChange.send()
         }
+    }
+    
+    func addCategory(_ category: Category) {
+        categories.append(category)
+        saveCategories()
+        objectWillChange.send()
     }
     
     func savePoints(_ points: Int, for date: Date, categories: [Category: Double]) {
@@ -238,6 +238,47 @@ class SettingsManager: ObservableObject {
         return categories.map { category in
             (category, pointsForDay[category] ?? 0)
         }
+    }
+    
+    func isTimeSlotLogged(start: Date, end: Date) -> Bool {
+        let calendar = Calendar.current
+        return loggedTimeSlots.contains { slot in
+            calendar.isDate(slot.start, inSameDayAs: start) &&
+            slot.start <= end && slot.end >= start
+        }
+    }
+    
+    func logTimeSlot(start: Date, end: Date) {
+        loggedTimeSlots.append(TimeSlot(start: start, end: end))
+        // Clean up old entries (optional)
+        let calendar = Calendar.current
+        let oldestToKeep = calendar.date(byAdding: .day, value: -7, to: Date())!
+        loggedTimeSlots = loggedTimeSlots.filter { $0.start >= oldestToKeep }
+        saveLoggedTimeSlots()
+    }
+    
+    func resetTodayPoints() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        
+        // Remove today's points and completed cards
+        dailyPoints.removeValue(forKey: today)
+        categoryPoints.removeValue(forKey: today)
+        completedCards.removeAll { card in
+            calendar.isDateInToday(card.startTime)
+        }
+        
+        // Remove today's logged time slots
+        loggedTimeSlots = loggedTimeSlots.filter { slot in
+            !calendar.isDateInToday(slot.start)
+        }
+        
+        // Save all changes
+        saveDailyPoints()
+        saveCategoryPoints()
+        saveLoggedTimeSlots()
+        saveCompletedCards()
+        objectWillChange.send()
     }
     
     private func saveCategories() {
@@ -280,5 +321,47 @@ class SettingsManager: ObservableObject {
            let decoded = try? JSONDecoder().decode([Date: [Category: Int]].self, from: saved) {
             categoryPoints = decoded
         }
+    }
+    
+    private func loadLoggedTimeSlots() {
+        if let data = UserDefaults.standard.data(forKey: "loggedTimeSlots"),
+           let decoded = try? JSONDecoder().decode([TimeSlot].self, from: data) {
+            loggedTimeSlots = decoded
+        }
+    }
+    
+    private func saveLoggedTimeSlots() {
+        if let encoded = try? JSONEncoder().encode(loggedTimeSlots) {
+            UserDefaults.standard.set(encoded, forKey: "loggedTimeSlots")
+        }
+    }
+    
+    private func loadCompletedCards() {
+        if let data = UserDefaults.standard.data(forKey: "completedCards"),
+           let decoded = try? JSONDecoder().decode([LogCard].self, from: data) {
+            completedCards = decoded
+        }
+    }
+    
+    private func saveCompletedCards() {
+        if let encoded = try? JSONEncoder().encode(completedCards) {
+            UserDefaults.standard.set(encoded, forKey: "completedCards")
+        }
+    }
+    
+    func addCompletedCard(_ card: LogCard) {
+        completedCards.append(card)
+        saveCompletedCards()
+    }
+    
+    func getCompletedCards(for date: Date) -> [LogCard] {
+        let calendar = Calendar.current
+        return completedCards.filter { card in
+            calendar.isDate(card.startTime, inSameDayAs: date)
+        }
+    }
+    
+    func getAllCompletedCards() -> [LogCard] {
+        return completedCards.sorted { $0.startTime > $1.startTime }
     }
 } 
