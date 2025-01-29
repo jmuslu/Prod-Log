@@ -8,25 +8,17 @@ struct SettingsView: View {
         NavigationView {
             Form {
                 Section(header: Text("Time Interval")) {
-                    Picker("Interval", selection: $settingsManager.timeInterval) {
-                        ForEach(settingsManager.availableIntervals, id: \.self) { interval in
-                            Text("\(interval) hour\(interval == 1 ? "" : "s")")
-                                .tag(interval)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    TimeIntervalSlider(selection: $settingsManager.timeInterval, intervals: settingsManager.availableIntervals)
                 }
                 
                 Section(header: Text("Categories")) {
                     ForEach(settingsManager.categories) { category in
                         CategoryRow(category: category)
                             .swipeActions(allowsFullSwipe: false) {
-                                if !category.isDefault {
-                                    Button(role: .destructive) {
-                                        settingsManager.removeCategory(category)
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
+                                Button(role: .destructive) {
+                                    settingsManager.removeCategory(category)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
                                 }
                             }
                     }
@@ -46,6 +38,75 @@ struct SettingsView: View {
             .sheet(isPresented: $showingAddCategory) {
                 AddCategoryView()
             }
+        }
+    }
+}
+
+struct TimeIntervalSlider: View {
+    @Binding var selection: Int
+    let intervals: [Int]
+    
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.2))
+                        .frame(height: 4)
+                    
+                    Rectangle()
+                        .fill(Color.accentColor)
+                        .frame(width: sliderPosition(in: geometry.size.width), height: 4)
+                    
+                    HStack(spacing: 0) {
+                        ForEach(intervals, id: \.self) { interval in
+                            Circle()
+                                .fill(selection >= interval ? Color.accentColor : Color.secondary.opacity(0.2))
+                                .frame(width: 20, height: 20)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white, lineWidth: 2)
+                                )
+                                .frame(maxWidth: .infinity)
+                                .onTapGesture {
+                                    withAnimation {
+                                        selection = interval
+                                    }
+                                }
+                        }
+                    }
+                }
+                
+                HStack(spacing: 0) {
+                    ForEach(intervals, id: \.self) { interval in
+                        Text("\(interval)h")
+                            .font(.caption)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        updateSelection(at: value.location.x, in: geometry.size.width)
+                    }
+            )
+        }
+        .frame(height: 50)
+        .padding(.horizontal)
+    }
+    
+    private func sliderPosition(in width: CGFloat) -> CGFloat {
+        let index = CGFloat(intervals.firstIndex(of: selection) ?? 0)
+        let segmentWidth = width / CGFloat(intervals.count - 1)
+        return index * segmentWidth
+    }
+    
+    private func updateSelection(at position: CGFloat, in width: CGFloat) {
+        let segmentWidth = width / CGFloat(intervals.count - 1)
+        let index = Int((position / segmentWidth).rounded())
+        if index >= 0 && index < intervals.count {
+            selection = intervals[index]
         }
     }
 }

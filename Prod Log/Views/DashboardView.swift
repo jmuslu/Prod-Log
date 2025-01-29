@@ -12,6 +12,8 @@ struct DashboardView: View {
                     ForEach(0..<7) { dayIndex in
                         DailyActivityBar(dayIndex: dayIndex)
                     }
+                    
+                    CategoryLegend()
                 }
                 .padding()
             }
@@ -39,6 +41,11 @@ struct WeeklyPointsCard: View {
 
 struct DailyActivityBar: View {
     let dayIndex: Int
+    @EnvironmentObject var settingsManager: SettingsManager
+    
+    // This would be calculated from actual logged data
+    var dailyPoints: Int = 0
+    var categoryData: [Category: Double] = [:]
     
     var dayName: String {
         let calendar = Calendar.current
@@ -50,22 +57,63 @@ struct DailyActivityBar: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(dayName)
                 .font(.subheadline)
             
-            GeometryReader { geometry in
-                HStack(spacing: 0) {
-                    // This will be replaced with actual category data
-                    ForEach(Category.defaultCategories) { category in
-                        Rectangle()
+            if categoryData.isEmpty {
+                Text("No activities logged")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                GeometryReader { geometry in
+                    HStack(spacing: 0) {
+                        ForEach(settingsManager.categories) { category in
+                            if let width = categoryData[category] {
+                                Rectangle()
+                                    .fill(category.color)
+                                    .frame(width: geometry.size.width * width)
+                            }
+                        }
+                    }
+                }
+                .frame(height: 20)
+                .cornerRadius(5)
+            }
+            
+            Text("Total: \(dailyPoints) points")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+}
+
+struct CategoryLegend: View {
+    @EnvironmentObject var settingsManager: SettingsManager
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Categories")
+                .font(.headline)
+            
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 12) {
+                ForEach(settingsManager.categories) { category in
+                    HStack {
+                        Circle()
                             .fill(category.color)
-                            .frame(width: geometry.size.width / CGFloat(Category.defaultCategories.count))
+                            .frame(width: 12, height: 12)
+                        Text(category.name)
+                            .font(.caption)
+                        Spacer()
                     }
                 }
             }
-            .frame(height: 20)
-            .cornerRadius(5)
         }
+        .padding()
+        .background(Color.secondary.opacity(0.1))
+        .cornerRadius(10)
     }
 } 
