@@ -73,13 +73,9 @@ struct TimeIntervalSlider: View {
                     
                     HStack(spacing: 0) {
                         ForEach(intervals, id: \.self) { interval in
-                            Circle()
+                            Rectangle()
                                 .fill(selection >= interval ? Color.accentColor : Color.secondary.opacity(0.2))
-                                .frame(width: 20, height: 20)
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.white, lineWidth: 2)
-                                )
+                                .frame(width: 2, height: 20)
                                 .frame(maxWidth: .infinity)
                                 .onTapGesture {
                                     withAnimation {
@@ -193,4 +189,4 @@ struct CategoryRow: View {
                 .foregroundColor(.secondary)
         }
     }
-} 
+}

@@ -13,14 +13,17 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var settingsManager = SettingsManager()
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hellooooooooos, world!")
+        if !hasCompletedOnboarding {
+            OnboardingView()
+                .environmentObject(settingsManager)
+        } else {
+            MainTabView()
+                .environmentObject(settingsManager)
         }
-        .padding()
     }
 }
 
