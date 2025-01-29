@@ -14,8 +14,15 @@ struct LoggerView: View {
         NavigationView {
             List {
                 if logCards.isEmpty {
-                    Text("Waiting for next log card...")
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Waiting for next log card...")
+                            .foregroundColor(.secondary)
+                        if let next = nextCardDate {
+                            Text("Next card in: \(timerString)")
+                                .foregroundColor(.primary)
+                                .font(.headline)
+                        }
+                    }
                 } else {
                     if nextCardDate != nil {
                         TimerRowView(timerString: timerString)
@@ -75,19 +82,19 @@ struct LoggerView: View {
     
     private func startLogging() {
         logCards.removeAll()
+        scheduleNextCard()
         if let timeSlot = settingsManager.getCurrentTimeSlot() {
             createNewLogCard(for: timeSlot)
         }
-        scheduleNextCard()
     }
     
     private func restartLogging() {
         cardTimer?.invalidate()
         logCards.removeAll { !$0.isComplete }
+        scheduleNextCard()
         if let timeSlot = settingsManager.getCurrentTimeSlot() {
             createNewLogCard(for: timeSlot)
         }
-        scheduleNextCard()
     }
     
     private func scheduleNextCard() {
@@ -95,6 +102,7 @@ struct LoggerView: View {
         nextCardDate = nextSlot
         
         let interval = nextSlot.timeIntervalSinceNow
+        cardTimer?.invalidate()
         cardTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [self] _ in
             if let timeSlot = settingsManager.getCurrentTimeSlot() {
                 createNewLogCard(for: timeSlot)
