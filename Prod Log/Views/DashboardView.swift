@@ -43,47 +43,61 @@ struct DailyActivityBar: View {
     let dayIndex: Int
     @EnvironmentObject var settingsManager: SettingsManager
     
-    // This would be calculated from actual logged data
-    var dailyPoints: Int = 0
-    var categoryData: [Category: Double] = [:]
+    var dailyPoints: Int {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        guard let date = calendar.date(byAdding: .day, value: -dayIndex, to: today) else { return 0 }
+        return settingsManager.getPoints(for: date)
+    }
+    
+    var categoryPoints: [(Category, Int)] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        guard let date = calendar.date(byAdding: .day, value: -dayIndex, to: today) else { return [] }
+        return settingsManager.getCategoryPoints(for: date)
+    }
+    
+    var totalPoints: Int {
+        categoryPoints.reduce(0) { $0 + $1.1 }
+    }
     
     var dayName: String {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         guard let date = calendar.date(byAdding: .day, value: -dayIndex, to: today) else { return "" }
         let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE"
+        formatter.dateFormat = "E"
         return formatter.string(from: date)
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(dayName)
-                .font(.subheadline)
-            
-            if categoryData.isEmpty {
-                Text("No activities logged")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } else {
-                GeometryReader { geometry in
-                    HStack(spacing: 0) {
-                        ForEach(settingsManager.categories) { category in
-                            if let width = categoryData[category] {
-                                Rectangle()
-                                    .fill(category.color)
-                                    .frame(width: geometry.size.width * width)
-                            }
+        VStack(alignment: .leading, spacing: 4) {
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    ForEach(categoryPoints, id: \.0.id) { category, points in
+                        if totalPoints > 0 {
+                            Rectangle()
+                                .fill(category.color)
+                                .frame(width: geometry.size.width * CGFloat(points) / CGFloat(totalPoints))
                         }
                     }
                 }
-                .frame(height: 20)
-                .cornerRadius(5)
             }
+            .frame(height: 20)
+            .cornerRadius(5)
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+            )
             
-            Text("Total: \(dailyPoints) points")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            HStack {
+                Text(dayName)
+                    .font(.caption)
+                Spacer()
+                Text("\(dailyPoints)pts")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 }

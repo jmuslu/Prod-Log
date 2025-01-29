@@ -2,18 +2,27 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var settingsManager: SettingsManager
-    @State private var showingAddCategory = false
+    @State private var showingCategorySheet = false
+    @State private var selectedCategory: Category?
     
     var body: some View {
         NavigationView {
             Form {
                 Section(header: Text("Time Interval")) {
-                    TimeIntervalSlider(selection: $settingsManager.timeInterval, intervals: settingsManager.availableIntervals)
+                    TimeIntervalSlider(selection: Binding(
+                        get: { Int(settingsManager.timeInterval) },
+                        set: { settingsManager.timeInterval = Double($0) }
+                    ), intervals: settingsManager.availableIntervals.map { Int($0) })
                 }
                 
                 Section(header: Text("Categories")) {
                     ForEach(settingsManager.categories) { category in
                         CategoryRow(category: category)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selectedCategory = category
+                                showingCategorySheet = true
+                            }
                             .swipeActions(allowsFullSwipe: false) {
                                 Button(role: .destructive) {
                                     settingsManager.removeCategory(category)
@@ -23,7 +32,10 @@ struct SettingsView: View {
                             }
                     }
                     
-                    Button(action: { showingAddCategory = true }) {
+                    Button(action: {
+                        selectedCategory = nil
+                        showingCategorySheet = true
+                    }) {
                         Label("Add Category", systemImage: "plus")
                     }
                 }
@@ -35,8 +47,8 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
-            .sheet(isPresented: $showingAddCategory) {
-                AddCategoryView()
+            .sheet(isPresented: $showingCategorySheet) {
+                CategoryEditView(category: selectedCategory)
             }
         }
     }
@@ -111,6 +123,58 @@ struct TimeIntervalSlider: View {
     }
 }
 
+struct CategoryEditView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var settingsManager: SettingsManager
+    
+    let category: Category?
+    @State private var name: String = ""
+    @State private var color: Color = .blue
+    @State private var pointsPerMinute: Double = 5.0
+    
+    init(category: Category?) {
+        self.category = category
+        _name = State(initialValue: category?.name ?? "")
+        _color = State(initialValue: category?.color ?? .blue)
+        _pointsPerMinute = State(initialValue: category?.pointsPerMinute ?? 5.0)
+    }
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                TextField("Category Name", text: $name)
+                    .foregroundColor(.primary)
+                
+                ColorPicker("Category Color", selection: $color)
+                
+                Stepper("Points per Minute: \(Int(pointsPerMinute))", value: $pointsPerMinute, in: 1...20)
+            }
+            .navigationTitle(category == nil ? "New Category" : "Edit Category")
+            .navigationBarItems(
+                leading: Button("Cancel") { dismiss() },
+                trailing: Button(category == nil ? "Add" : "Save") {
+                    if let existingCategory = category {
+                        settingsManager.updateCategory(
+                            existingCategory,
+                            name: name,
+                            color: color,
+                            pointsPerMinute: pointsPerMinute
+                        )
+                    } else {
+                        settingsManager.addCategory(
+                            name: name,
+                            color: color,
+                            pointsPerMinute: pointsPerMinute
+                        )
+                    }
+                    dismiss()
+                }
+                .disabled(name.isEmpty)
+            )
+        }
+    }
+}
+
 struct CategoryRow: View {
     let category: Category
     
@@ -126,40 +190,6 @@ struct CategoryRow: View {
             
             Text("\(Int(category.pointsPerMinute)) pts/min")
                 .foregroundColor(.secondary)
-        }
-    }
-}
-
-struct AddCategoryView: View {
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var settingsManager: SettingsManager
-    
-    @State private var name = ""
-    @State private var color = Color.blue
-    @State private var pointsPerMinute = 5.0
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                TextField("Category Name", text: $name)
-                
-                ColorPicker("Category Color", selection: $color)
-                
-                Stepper("Points per Minute: \(Int(pointsPerMinute))", value: $pointsPerMinute, in: 1...20)
-            }
-            .navigationTitle("New Category")
-            .navigationBarItems(
-                leading: Button("Cancel") { dismiss() },
-                trailing: Button("Add") {
-                    settingsManager.addCategory(
-                        name: name,
-                        color: color,
-                        pointsPerMinute: pointsPerMinute
-                    )
-                    dismiss()
-                }
-                .disabled(name.isEmpty)
-            )
         }
     }
 } 
