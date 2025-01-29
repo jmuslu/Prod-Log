@@ -3,7 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var settingsManager: SettingsManager
     @State private var showingCategorySheet = false
-    @State private var selectedCategory: Category?
+    @State private var editingCategory: Category?
     
     var body: some View {
         NavigationView {
@@ -20,7 +20,7 @@ struct SettingsView: View {
                         CategoryRow(category: category)
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                selectedCategory = category
+                                editingCategory = category
                                 showingCategorySheet = true
                             }
                             .swipeActions(allowsFullSwipe: false) {
@@ -33,7 +33,7 @@ struct SettingsView: View {
                     }
                     
                     Button(action: {
-                        selectedCategory = nil
+                        editingCategory = nil
                         showingCategorySheet = true
                     }) {
                         Label("Add Category", systemImage: "plus")
@@ -48,7 +48,8 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .sheet(isPresented: $showingCategorySheet) {
-                CategoryEditView(category: selectedCategory)
+                CategoryEditView(category: editingCategory)
+                    .environmentObject(settingsManager)
             }
         }
     }
@@ -128,9 +129,9 @@ struct CategoryEditView: View {
     @EnvironmentObject var settingsManager: SettingsManager
     
     let category: Category?
-    @State private var name: String = ""
-    @State private var color: Color = .blue
-    @State private var pointsPerMinute: Double = 5.0
+    @State private var name: String
+    @State private var color: Color
+    @State private var pointsPerMinute: Double
     
     init(category: Category?) {
         self.category = category

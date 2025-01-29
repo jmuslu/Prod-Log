@@ -29,16 +29,42 @@ class SettingsManager: ObservableObject {
         return calendar.date(from: components)!
     }
     
-    func getCurrentTimeSlot() -> (start: Date, end: Date) {
+    func getCurrentTimeSlot() -> (start: Date, end: Date)? {
         let calendar = Calendar.current
         let now = Date()
         let hour = calendar.component(.hour, from: now)
         let intervalHours = Int(timeInterval)
         
+        // Calculate the current slot
         let currentSlot = (hour / intervalHours) * intervalHours
         
         var startComponents = calendar.dateComponents([.year, .month, .day], from: now)
         startComponents.hour = currentSlot
+        startComponents.minute = 0
+        startComponents.second = 0
+        
+        let startDate = calendar.date(from: startComponents)!
+        let endDate = calendar.date(byAdding: .hour, value: intervalHours, to: startDate)!
+        
+        // Only return the slot if it's completed
+        if now >= endDate {
+            return (startDate, endDate)
+        }
+        return nil
+    }
+    
+    func getLastCompletedSlot() -> (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let now = Date()
+        let hour = calendar.component(.hour, from: now)
+        let intervalHours = Int(timeInterval)
+        
+        // Calculate the last completed slot
+        let currentSlot = (hour / intervalHours) * intervalHours
+        let lastSlot = currentSlot - intervalHours
+        
+        var startComponents = calendar.dateComponents([.year, .month, .day], from: now)
+        startComponents.hour = lastSlot
         startComponents.minute = 0
         startComponents.second = 0
         
@@ -96,17 +122,15 @@ class SettingsManager: ObservableObject {
     
     func updateCategory(_ category: Category, name: String, color: Color, pointsPerMinute: Double) {
         if let index = categories.firstIndex(where: { $0.id == category.id }) {
-            let updatedCategory = Category(
+            categories[index] = Category(
                 id: category.id,
                 name: name,
                 color: color,
                 pointsPerMinute: pointsPerMinute,
                 isDefault: category.isDefault
             )
-            categories[index] = updatedCategory
-            objectWillChange.send()
-            
             saveCategories()
+            objectWillChange.send()
         }
     }
     
@@ -146,6 +170,7 @@ class SettingsManager: ObservableObject {
     private func saveCategories() {
         if let encoded = try? JSONEncoder().encode(categories) {
             UserDefaults.standard.set(encoded, forKey: "savedCategories")
+            UserDefaults.standard.synchronize() // Force save
         }
     }
     
