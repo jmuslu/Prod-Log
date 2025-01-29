@@ -23,13 +23,14 @@ struct SettingsView: View {
                                 editingCategory = category
                                 showingCategorySheet = true
                             }
-                            .swipeActions(allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    settingsManager.removeCategory(category)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
+                    }
+                    .onDelete { indexSet in
+                        for index in indexSet {
+                            let category = settingsManager.categories[index]
+                            if !category.isDefault {
+                                settingsManager.removeCategory(category)
                             }
+                        }
                     }
                     
                     Button(action: {
@@ -39,17 +40,10 @@ struct SettingsView: View {
                         Label("Add Category", systemImage: "plus")
                     }
                 }
-                
-                Section {
-                    Button("Reset Points", role: .destructive) {
-                        settingsManager.resetPoints()
-                    }
-                }
             }
             .navigationTitle("Settings")
             .sheet(isPresented: $showingCategorySheet) {
-                CategoryEditView(category: editingCategory)
-                    .environmentObject(settingsManager)
+                CategoryEditSheet(category: editingCategory)
             }
         }
     }
@@ -60,74 +54,98 @@ struct TimeIntervalSlider: View {
     let intervals: [Int]
     
     var body: some View {
-        GeometryReader { geometry in
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(spacing: 20) {
+            // Current selection display
+            Text("\(selection) hour\(selection == 1 ? "" : "s") between log cards")
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            // Timeline slider
+            GeometryReader { geometry in
                 ZStack(alignment: .leading) {
+                    // Base line
                     Rectangle()
                         .fill(Color.secondary.opacity(0.2))
-                        .frame(height: 4)
+                        .frame(height: 2)
                     
-                    Rectangle()
-                        .fill(Color.accentColor)
-                        .frame(width: sliderPosition(in: geometry.size.width), height: 4)
-                    
-                    HStack(spacing: 0) {
-                        ForEach(intervals, id: \.self) { interval in
-                            Rectangle()
-                                .fill(selection >= interval ? Color.accentColor : Color.secondary.opacity(0.2))
-                                .frame(width: 2, height: 20)
-                                .frame(maxWidth: .infinity)
-                                .onTapGesture {
-                                    withAnimation {
-                                        selection = interval
-                                    }
-                                }
-                        }
-                    }
-                }
-                
-                HStack(spacing: 0) {
+                    // Interval markers
                     ForEach(intervals, id: \.self) { interval in
-                        Text("\(interval)h")
-                            .font(.caption)
-                            .frame(maxWidth: .infinity)
+                        TimelineMarker(
+                            interval: interval,
+                            isSelected: interval == selection,
+                            width: geometry.size.width,
+                            intervals: intervals
+                        )
+                    }
+                    
+                    // Selection indicator
+                    if let index = intervals.firstIndex(of: selection) {
+                        let position = (CGFloat(index) / CGFloat(intervals.count - 1)) * (geometry.size.width - 40)
+                        Circle()
+                            .fill(Color.accentColor)
+                            .frame(width: 20, height: 20)
+                            .offset(x: position + 10)
                     }
                 }
+                .frame(height: 60)
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            updateSelection(at: value.location.x, in: geometry.size.width)
+                        }
+                )
             }
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        updateSelection(at: value.location.x, in: geometry.size.width)
-                    }
-            )
+            .frame(height: 60)
+            
+            // Hour divisions
+            Text("\(24/selection) time slots per day")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
         }
-        .frame(height: 50)
-        .padding(.horizontal)
-    }
-    
-    private func sliderPosition(in width: CGFloat) -> CGFloat {
-        let index = CGFloat(intervals.firstIndex(of: selection) ?? 0)
-        let segmentWidth = width / CGFloat(intervals.count - 1)
-        return index * segmentWidth
+        .padding()
+        .background(Color.secondary.opacity(0.1))
+        .cornerRadius(12)
     }
     
     private func updateSelection(at position: CGFloat, in width: CGFloat) {
-        let segmentWidth = width / CGFloat(intervals.count - 1)
-        let index = Int((position / segmentWidth).rounded())
-        if index >= 0 && index < intervals.count {
-            selection = intervals[index]
+        let stepWidth = width / CGFloat(intervals.count - 1)
+        let index = Int(round(position / stepWidth))
+        let boundedIndex = max(0, min(index, intervals.count - 1))
+        selection = intervals[boundedIndex]
+    }
+}
+
+struct TimelineMarker: View {
+    let interval: Int
+    let isSelected: Bool
+    let width: CGFloat
+    let intervals: [Int]
+    
+    var body: some View {
+        if let index = intervals.firstIndex(of: interval) {
+            let position = (CGFloat(index) / CGFloat(intervals.count - 1)) * (width - 40)
+            VStack(spacing: 4) {
+                Rectangle()
+                    .fill(isSelected ? Color.accentColor : Color.secondary)
+                    .frame(width: 2, height: 10)
+                Text("\(interval)h")
+                    .font(.caption)
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
+            }
+            .offset(x: position + 20)
         }
     }
 }
 
-struct CategoryEditView: View {
+struct CategoryEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var settingsManager: SettingsManager
     
     let category: Category?
-    @State private var name: String
-    @State private var color: Color
-    @State private var pointsPerMinute: Double
+    
+    @State private var name: String = ""
+    @State private var color: Color = .blue
+    @State private var pointsPerMinute: Double = 5.0
     
     init(category: Category?) {
         self.category = category
@@ -139,35 +157,40 @@ struct CategoryEditView: View {
     var body: some View {
         NavigationView {
             Form {
-                TextField("Category Name", text: $name)
-                    .foregroundColor(.primary)
-                
-                ColorPicker("Category Color", selection: $color)
-                
-                Stepper("Points per Minute: \(Int(pointsPerMinute))", value: $pointsPerMinute, in: 1...20)
+                Section {
+                    TextField("Category Name", text: $name)
+                    
+                    ColorPicker("Color", selection: $color)
+                    
+                    VStack(alignment: .leading) {
+                        Text("Points per Minute: \(Int(pointsPerMinute))")
+                        Slider(value: $pointsPerMinute, in: 1...20, step: 1)
+                    }
+                }
             }
             .navigationTitle(category == nil ? "New Category" : "Edit Category")
-            .navigationBarItems(
-                leading: Button("Cancel") { dismiss() },
-                trailing: Button(category == nil ? "Add" : "Save") {
-                    if let existingCategory = category {
-                        settingsManager.updateCategory(
-                            existingCategory,
-                            name: name,
-                            color: color,
-                            pointsPerMinute: pointsPerMinute
-                        )
-                    } else {
-                        settingsManager.addCategory(
-                            name: name,
-                            color: color,
-                            pointsPerMinute: pointsPerMinute
-                        )
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
                     }
-                    dismiss()
                 }
-                .disabled(name.isEmpty)
-            )
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(category == nil ? "Add" : "Save") {
+                        saveCategory()
+                        dismiss()
+                    }
+                    .disabled(name.isEmpty)
+                }
+            }
+        }
+    }
+    
+    private func saveCategory() {
+        if let existingCategory = category {
+            settingsManager.updateCategory(existingCategory, name: name, color: color, pointsPerMinute: pointsPerMinute)
+        } else {
+            settingsManager.addCategory(name: name, color: color, pointsPerMinute: pointsPerMinute)
         }
     }
 }
@@ -186,6 +209,9 @@ struct CategoryRow: View {
             Spacer()
             
             Text("\(Int(category.pointsPerMinute)) pts/min")
+                .foregroundColor(.secondary)
+            
+            Image(systemName: "chevron.right")
                 .foregroundColor(.secondary)
         }
     }

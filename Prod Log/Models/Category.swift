@@ -1,18 +1,20 @@
 import SwiftUI
 
 struct Category: Identifiable, Codable, Hashable {
-    var id: UUID
-    var name: String
-    var color: Color
-    var pointsPerMinute: Double
-    var isDefault: Bool
+    let id: UUID
+    let name: String
+    let color: Color
+    let pointsPerMinute: Double
+    let isDefault: Bool
+    let deletedDate: Date?
     
-    init(id: UUID = UUID(), name: String, color: Color, pointsPerMinute: Double, isDefault: Bool) {
+    init(id: UUID = UUID(), name: String, color: Color, pointsPerMinute: Double, isDefault: Bool, deletedDate: Date? = nil) {
         self.id = id
         self.name = name
         self.color = color
         self.pointsPerMinute = pointsPerMinute
         self.isDefault = isDefault
+        self.deletedDate = deletedDate
     }
     
     static let defaultCategories = [

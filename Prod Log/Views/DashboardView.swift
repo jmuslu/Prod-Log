@@ -23,7 +23,18 @@ struct DashboardView: View {
 }
 
 struct WeeklyPointsCard: View {
-    var totalPoints: Int = 0 // This will be calculated later
+    @EnvironmentObject var settingsManager: SettingsManager
+    
+    var totalPoints: Int {
+        let calendar = Calendar.current
+        let today = Date()
+        let weekAgo = calendar.date(byAdding: .day, value: -7, to: today)!
+        
+        return (0...6).reduce(0) { total, daysAgo in
+            let date = calendar.date(byAdding: .day, value: -daysAgo, to: today)!
+            return total + settingsManager.getPoints(for: date)
+        }
+    }
     
     var body: some View {
         VStack {
@@ -55,6 +66,12 @@ struct DailyActivityBar: View {
         let today = calendar.startOfDay(for: Date())
         guard let date = calendar.date(byAdding: .day, value: -dayIndex, to: today) else { return [] }
         return settingsManager.getCategoryPoints(for: date)
+            .filter { category, _ in
+                if let deletedDate = category.deletedDate {
+                    return deletedDate > date
+                }
+                return true
+            }
     }
     
     var totalPoints: Int {
@@ -75,10 +92,10 @@ struct DailyActivityBar: View {
             GeometryReader { geometry in
                 HStack(spacing: 0) {
                     ForEach(categoryPoints, id: \.0.id) { category, points in
-                        if totalPoints > 0 {
+                        if totalPoints > 0 && points > 0 {
                             Rectangle()
                                 .fill(category.color)
-                                .frame(width: geometry.size.width * CGFloat(points) / CGFloat(totalPoints))
+                                .frame(width: max(0, geometry.size.width * CGFloat(points) / CGFloat(totalPoints)))
                         }
                     }
                 }

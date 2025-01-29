@@ -13,27 +13,35 @@ struct LoggerView: View {
     var body: some View {
         NavigationView {
             List {
-                if logCards.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Waiting for next log card...")
+                Section {
+                    HStack {
+                        Text("Next card in:")
                             .foregroundColor(.secondary)
-                        if let next = nextCardDate {
-                            Text("Next card in: \(timerString)")
-                                .foregroundColor(.primary)
-                                .font(.headline)
+                        Spacer()
+                        Text(timerString)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                    }
+                }
+                
+                // Current and upcoming time slots
+                Section(header: Text("Current & Upcoming")) {
+                    ForEach(incompletedCards) { card in
+                        if isCardInCurrentOrFutureSlot(card) {
+                            LogCardView(card: card)
+                                .onTapGesture {
+                                    selectedCard = card
+                                    showingCategorySheet = true
+                                }
                         }
                     }
-                } else {
-                    if nextCardDate != nil {
-                        TimerRowView(timerString: timerString)
-                    }
-                    
-                    ForEach(logCards.filter { !$0.isComplete }) { card in
-                        LogCardView(card: card)
-                            .onTapGesture {
-                                selectedCard = card
-                                showingCategorySheet = true
-                            }
+                }
+                
+                if !completedCards.isEmpty {
+                    Section("Completed") {
+                        ForEach(completedCards) { card in
+                            LogCardView(card: card)
+                        }
                     }
                 }
             }
@@ -49,6 +57,7 @@ struct LoggerView: View {
         }
         .onAppear {
             startLogging()
+            updateTimerDisplay()
         }
         .onDisappear {
             cardTimer?.invalidate()
@@ -58,68 +67,109 @@ struct LoggerView: View {
         }
     }
     
-    private func updateTimerDisplay() {
-        guard let next = nextCardDate else {
-            timerString = ""
-            return
-        }
-        
-        let remaining = next.timeIntervalSinceNow
-        if remaining <= 0 {
-            timerString = "Due now"
-        } else {
-            let hours = Int(remaining) / 3600
-            let minutes = (Int(remaining) % 3600) / 60
-            let seconds = Int(remaining) % 60
-            
-            if hours > 0 {
-                timerString = String(format: "%d:%02d:%02d", hours, minutes, seconds)
-            } else {
-                timerString = String(format: "%d:%02d", minutes, seconds)
+    private var incompletedCards: [LogCard] {
+        let now = Date()
+        return logCards
+            .filter { !$0.isComplete }
+            .filter { card in
+                let calendar = Calendar.current
+                return calendar.isDateInToday(card.startTime)
+            }
+            .sorted { $0.startTime < $1.startTime }
+    }
+    
+    private var completedCards: [LogCard] {
+        logCards
+            .filter { $0.isComplete }
+            .sorted { $0.startTime > $1.startTime }
+    }
+    
+    private func isCardInCurrentOrFutureSlot(_ card: LogCard) -> Bool {
+        let now = Date()
+        return card.endTime > now
+    }
+    
+    private func saveCard(_ card: LogCard) {
+        if let index = logCards.firstIndex(where: { $0.id == card.id }) {
+            logCards[index] = card
+            // Remove the card from view if it's complete
+            if card.isComplete {
+                startLogging() // Refresh the card list
             }
         }
     }
     
-    private func startLogging() {
-        logCards.removeAll()
-        scheduleNextCard()
-        if let timeSlot = settingsManager.getCurrentTimeSlot() {
-            createNewLogCard(for: timeSlot)
+    private func updateTimerDisplay() {
+        guard let nextDate = nextCardDate else {
+            timerString = "No upcoming cards"
+            return
+        }
+        
+        let interval = nextDate.timeIntervalSinceNow
+        if interval <= 0 {
+            startLogging() // Refresh if we've passed the next card time
+            return
+        }
+        
+        let hours = Int(interval) / 3600
+        let minutes = (Int(interval) % 3600) / 60
+        let seconds = Int(interval) % 60
+        
+        if hours > 0 {
+            timerString = String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            timerString = String(format: "%02d:%02d", minutes, seconds)
         }
     }
     
-    private func restartLogging() {
-        cardTimer?.invalidate()
-        logCards.removeAll { !$0.isComplete }
-        scheduleNextCard()
-        if let timeSlot = settingsManager.getCurrentTimeSlot() {
-            createNewLogCard(for: timeSlot)
+    private func startLogging() {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        
+        // Keep completed cards
+        let completedCards = logCards.filter { $0.isComplete }
+        
+        // Generate all time slots for today
+        var newCards: [LogCard] = []
+        let intervalHours = Int(settingsManager.timeInterval)
+        
+        for hour in stride(from: 0, to: 24, by: intervalHours) {
+            var startComponents = calendar.dateComponents([.year, .month, .day], from: startOfDay)
+            startComponents.hour = hour
+            let startDate = calendar.date(from: startComponents)!
+            let endDate = calendar.date(byAdding: .hour, value: intervalHours, to: startDate)!
+            
+            // Add cards for all time slots that haven't been completed
+            if !completedCards.contains(where: { card in
+                calendar.isDate(card.startTime, inSameDayAs: startDate) &&
+                calendar.compare(card.startTime, to: startDate, toGranularity: .hour) == .orderedSame
+            }) {
+                let newCard = LogCard(startTime: startDate, endTime: endDate)
+                newCards.append(newCard)
+            }
         }
+        
+        // Add all cards in chronological order
+        logCards = (completedCards + newCards).sorted { $0.startTime > $1.startTime }
+        
+        // Schedule next card
+        scheduleNextCard()
     }
     
     private func scheduleNextCard() {
         let nextSlot = settingsManager.getNextTimeSlot()
         nextCardDate = nextSlot
         
-        let interval = nextSlot.timeIntervalSinceNow
         cardTimer?.invalidate()
-        cardTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [self] _ in
-            if let timeSlot = settingsManager.getCurrentTimeSlot() {
-                createNewLogCard(for: timeSlot)
-            }
-            scheduleNextCard()
+        cardTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
+            updateTimerDisplay()
         }
     }
     
-    private func createNewLogCard(for timeSlot: (start: Date, end: Date)) {
-        let exists = logCards.contains { card in
-            Calendar.current.isDate(card.startTime, inSameDayAs: timeSlot.start) &&
-            Calendar.current.compare(card.startTime, to: timeSlot.start, toGranularity: .hour) == .orderedSame
-        }
-        
-        if !exists {
-            let newCard = LogCard(startTime: timeSlot.start, endTime: timeSlot.end)
-            logCards.insert(newCard, at: 0)
-        }
+    private func restartLogging() {
+        cardTimer?.invalidate()
+        startLogging()
+        updateTimerDisplay()
     }
 } 

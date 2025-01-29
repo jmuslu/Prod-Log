@@ -1,32 +1,62 @@
 import SwiftUI
 
 class SettingsManager: ObservableObject {
-    @Published var timeInterval: Double = 3.0
-    @Published var categories: [Category] = Category.defaultCategories
-    @Published private var dailyPoints: [Date: Int] = [:]
-    @Published private var categoryPoints: [Date: [Category: Int]] = [:]
+    @Published var timeInterval: Double
+    @Published var categories: [Category]
+    @Published private var dailyPoints: [Date: Int]
+    @Published private var categoryPoints: [Date: [Category: Int]]
     
     let availableIntervals = [1.0, 2.0, 3.0, 4.0, 6.0, 12.0]
     
-    func getNextTimeSlot(from date: Date = Date()) -> Date {
+    init() {
+        // Initialize all stored properties first
+        self.categories = []
+        self.dailyPoints = [:]
+        self.categoryPoints = [:]
+        self.timeInterval = UserDefaults.standard.double(forKey: "timeInterval")
+        
+        // Set default time interval if needed
+        if self.timeInterval == 0 {
+            self.timeInterval = 3.0
+            UserDefaults.standard.set(self.timeInterval, forKey: "timeInterval")
+        }
+        
+        // Load saved data
+        loadCategories()
+        loadDailyPoints()
+        loadCategoryPoints()
+    }
+    
+    func getNextTimeSlot() -> Date {
         let calendar = Calendar.current
-        let hour = calendar.component(.hour, from: date)
+        let now = Date()
+        let currentHour = calendar.component(.hour, from: now)
+        let currentMinute = calendar.component(.minute, from: now)
         let intervalHours = Int(timeInterval)
         
-        let currentSlot = hour / intervalHours
-        let nextSlot = (currentSlot + 1) * intervalHours
+        // Calculate the next slot start time
+        var nextSlotHour = ((currentHour / intervalHours) + 1) * intervalHours
         
-        var components = calendar.dateComponents([.year, .month, .day], from: date)
-        components.hour = nextSlot
+        // If we're in the last slot of the day
+        if nextSlotHour >= 24 {
+            // Get tomorrow's first slot
+            guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) else {
+                return now
+            }
+            var components = calendar.dateComponents([.year, .month, .day], from: tomorrow)
+            components.hour = 0
+            components.minute = 0
+            components.second = 0
+            return calendar.date(from: components) ?? now
+        }
+        
+        // Get today's next slot
+        var components = calendar.dateComponents([.year, .month, .day], from: now)
+        components.hour = nextSlotHour
         components.minute = 0
         components.second = 0
         
-        if nextSlot >= 24 {
-            components = calendar.dateComponents([.year, .month, .day], from: calendar.date(byAdding: .day, value: 1, to: date)!)
-            components.hour = 0
-        }
-        
-        return calendar.date(from: components)!
+        return calendar.date(from: components) ?? now
     }
     
     func getCurrentTimeSlot() -> (start: Date, end: Date)? {
@@ -46,8 +76,8 @@ class SettingsManager: ObservableObject {
         let startDate = calendar.date(from: startComponents)!
         let endDate = calendar.date(byAdding: .hour, value: intervalHours, to: startDate)!
         
-        // Only return the slot if it's completed
-        if now >= endDate {
+        // Return the slot if we're currently in it
+        if now >= startDate && now < endDate {
             return (startDate, endDate)
         }
         return nil
@@ -85,12 +115,40 @@ class SettingsManager: ObservableObject {
     }
     
     func removeCategory(_ category: Category) {
-        categories.removeAll { $0.id == category.id }
-        saveCategories()
+        if let index = categories.firstIndex(where: { $0.id == category.id }) {
+            categories.remove(at: index)
+            
+            // Update points data to remove the deleted category
+            for (date, points) in categoryPoints {
+                var updatedPoints = points
+                updatedPoints.removeValue(forKey: category)
+                categoryPoints[date] = updatedPoints
+            }
+            
+            saveCategories()
+            saveCategoryPoints()
+            objectWillChange.send()
+        }
+    }
+    
+    func getActiveCategories() -> [Category] {
+        let calendar = Calendar.current
+        let oneWeekAgo = calendar.date(byAdding: .day, value: -7, to: Date())!
+        
+        return categories.filter { category in
+            if let deletedDate = category.deletedDate {
+                return deletedDate > oneWeekAgo
+            }
+            return true
+        }
     }
     
     func resetPoints() {
-        // Will implement points reset functionality later
+        dailyPoints.removeAll()
+        categoryPoints.removeAll()
+        saveDailyPoints()
+        saveCategoryPoints()
+        objectWillChange.send()
     }
     
     func calculatePoints(for card: LogCard) -> Int {
@@ -122,14 +180,29 @@ class SettingsManager: ObservableObject {
     
     func updateCategory(_ category: Category, name: String, color: Color, pointsPerMinute: Double) {
         if let index = categories.firstIndex(where: { $0.id == category.id }) {
-            categories[index] = Category(
+            let updatedCategory = Category(
                 id: category.id,
                 name: name,
                 color: color,
                 pointsPerMinute: pointsPerMinute,
                 isDefault: category.isDefault
             )
+            
+            // Update category in the list
+            categories[index] = updatedCategory
+            
+            // Update points data with the new category
+            for (date, points) in categoryPoints {
+                if let value = points[category] {
+                    var updatedPoints = points
+                    updatedPoints.removeValue(forKey: category)
+                    updatedPoints[updatedCategory] = value
+                    categoryPoints[date] = updatedPoints
+                }
+            }
+            
             saveCategories()
+            saveCategoryPoints()
             objectWillChange.send()
         }
     }
@@ -183,7 +256,29 @@ class SettingsManager: ObservableObject {
         }
     }
     
-    init() {
-        loadCategories()
+    private func saveDailyPoints() {
+        if let encoded = try? JSONEncoder().encode(dailyPoints) {
+            UserDefaults.standard.set(encoded, forKey: "dailyPoints")
+        }
+    }
+    
+    private func loadDailyPoints() {
+        if let saved = UserDefaults.standard.data(forKey: "dailyPoints"),
+           let decoded = try? JSONDecoder().decode([Date: Int].self, from: saved) {
+            dailyPoints = decoded
+        }
+    }
+    
+    private func saveCategoryPoints() {
+        if let encoded = try? JSONEncoder().encode(categoryPoints) {
+            UserDefaults.standard.set(encoded, forKey: "categoryPoints")
+        }
+    }
+    
+    private func loadCategoryPoints() {
+        if let saved = UserDefaults.standard.data(forKey: "categoryPoints"),
+           let decoded = try? JSONDecoder().decode([Date: [Category: Int]].self, from: saved) {
+            categoryPoints = decoded
+        }
     }
 } 
