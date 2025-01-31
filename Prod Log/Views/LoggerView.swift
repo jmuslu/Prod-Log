@@ -146,8 +146,10 @@ struct LoggerView: View {
         let now = Date()
         let thirtySixHoursAgo = calendar.date(byAdding: .hour, value: -36, to: now)!
         
-        // Keep completed cards in memory but mark them as reset if needed
-        let completedCards = logCards.filter { $0.isComplete }
+        // Get all completed cards from the last 36 hours
+        let completedTimeSlots = settingsManager.getAllCompletedCards()
+            .filter { $0.startTime >= thirtySixHoursAgo }
+            .map { (start: $0.startTime, end: $0.endTime) }
         
         // Generate new cards for elapsed time slots
         var newCards: [LogCard] = []
@@ -162,16 +164,25 @@ struct LoggerView: View {
             let endTime = calendar.date(byAdding: .hour, value: intervalHours, to: currentTime)!
             
             if endTime <= now {
-                let newCard = LogCard(startTime: currentTime, endTime: endTime)
-                newCards.append(newCard)
+                // Check if this time slot overlaps with any completed cards
+                let isTimeSlotCompleted = completedTimeSlots.contains { completedSlot in
+                    // Check for any overlap
+                    let slotStart = completedSlot.start
+                    let slotEnd = completedSlot.end
+                    return !(endTime <= slotStart || currentTime >= slotEnd)
+                }
+                
+                if !isTimeSlotCompleted {
+                    let newCard = LogCard(startTime: currentTime, endTime: endTime)
+                    newCards.append(newCard)
+                }
             }
             
             currentTime = endTime
         }
         
-        // Update the cards list
-        logCards = (completedCards + newCards)
-            .sorted { $0.startTime > $1.startTime }
+        // Update the cards list (only include uncompleted cards)
+        logCards = newCards.sorted { $0.startTime > $1.startTime }
         
         scheduleNextCard()
     }
