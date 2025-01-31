@@ -61,7 +61,7 @@ struct SettingsView: View {
                     NotificationCenter.default.post(name: .resetLogCards, object: nil)
                 }
             } message: {
-                Text("This will clear all logged activities for today. This action cannot be undone.")
+                Text("This will clear all logged activities and bring back all log cards for the last 36 hours. This action cannot be undone.")
             }
         }
     }

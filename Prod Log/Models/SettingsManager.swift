@@ -376,4 +376,25 @@ class SettingsManager: ObservableObject {
     func getAllCompletedCards() -> [LogCard] {
         return completedCards.sorted { $0.startTime > $1.startTime }
     }
+    
+    func clearCompletedCards(since date: Date) {
+        // Remove completed cards that are newer than the given date
+        completedCards = completedCards.filter { $0.startTime < date }
+        
+        // Also clear points for this period
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Clear points for each day in the range
+        var currentDate = date
+        while currentDate <= now {
+            if let points = dailyPoints[calendar.startOfDay(for: currentDate)] {
+                dailyPoints[calendar.startOfDay(for: currentDate)] = 0
+            }
+            currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? now
+        }
+        
+        saveCompletedCards()
+        saveDailyPoints()
+    }
 } 

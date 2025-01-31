@@ -83,10 +83,15 @@ struct CategorySelectionView: View {
     
     private func saveCategories() {
         if let index = logCards.firstIndex(where: { $0.id == card.id }) {
-            var updatedCard = logCards[index]
+            var updatedCard = card
             updatedCard.categories = categoryPercentages
             updatedCard.isComplete = true
-            logCards[index] = updatedCard
+            
+            // Save to completed cards in SettingsManager
+            settingsManager.addCompletedCard(updatedCard)
+            
+            // Remove from active cards list
+            logCards.remove(at: index)
             
             // Calculate and save points
             let points = settingsManager.calculatePoints(for: updatedCard)
