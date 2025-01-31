@@ -10,7 +10,7 @@ struct SettingsView: View {
         NavigationView {
             Form {
                 Section(header: Text("Time Interval")) {
-                    TimeIntervalSlider(selection: Binding(
+                    TimeIntervalPicker(selection: Binding(
                         get: { Int(settingsManager.timeInterval) },
                         set: { settingsManager.timeInterval = Double($0) }
                     ), intervals: settingsManager.availableIntervals.map { Int($0) })
@@ -26,6 +26,12 @@ struct SettingsView: View {
                             Spacer()
                             Text("\(category.pointsPerMinuteInt) pts/min")
                                 .foregroundColor(.secondary)
+                            Button(action: {
+                                settingsManager.removeCategory(category)
+                            }) {
+                                Image(systemName: "trash")
+                                    .foregroundColor(.red)
+                            }
                         }
                     }
                     
@@ -38,6 +44,17 @@ struct SettingsView: View {
                 }
                 
                 Section {
+                    Button(action: {
+                        settingsManager.resetToDefaultCategories()
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .foregroundColor(.blue)
+                            Text("Reset to Default Categories")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                    
                     Button(action: {
                         showingResetAlert = true
                     }) {
@@ -67,91 +84,44 @@ struct SettingsView: View {
     }
 }
 
-struct TimeIntervalSlider: View {
+struct TimeIntervalPicker: View {
     @Binding var selection: Int
     let intervals: [Int]
     
     var body: some View {
-        VStack(spacing: 20) {
-            // Current selection display
+        VStack(alignment: .leading, spacing: 12) {
             Text("\(selection) hour\(selection == 1 ? "" : "s") between log cards")
                 .font(.headline)
                 .foregroundColor(.primary)
             
-            // Timeline slider
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    // Base line
-                    Rectangle()
-                        .fill(Color.secondary.opacity(0.2))
-                        .frame(height: 2)
-                    
-                    // Interval markers
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
                     ForEach(intervals, id: \.self) { interval in
-                        TimelineMarker(
-                            interval: interval,
-                            isSelected: interval == selection,
-                            width: geometry.size.width,
-                            intervals: intervals
-                        )
-                    }
-                    
-                    // Selection indicator
-                    if let index = intervals.firstIndex(of: selection) {
-                        let position = (CGFloat(index) / CGFloat(intervals.count - 1)) * (geometry.size.width - 40)
-                        Circle()
-                            .fill(Color.accentColor)
-                            .frame(width: 20, height: 20)
-                            .offset(x: position + 10)
+                        Button(action: {
+                            selection = interval
+                        }) {
+                            Text("\(interval)h")
+                                .font(.system(.body, design: .rounded))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(
+                                    selection == interval ?
+                                        Color.accentColor :
+                                        Color.secondary.opacity(0.1)
+                                )
+                                .foregroundColor(
+                                    selection == interval ?
+                                        .white :
+                                        .primary
+                                )
+                                .cornerRadius(20)
+                        }
                     }
                 }
-                .frame(height: 60)
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            updateSelection(at: value.location.x, in: geometry.size.width)
-                        }
-                )
+                .padding(.horizontal, 4)
             }
-            .frame(height: 60)
-            
-            // Hour divisions
-            Text("\(24/selection) time slots per day")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
         }
-        .padding()
-        .background(Color.secondary.opacity(0.1))
-        .cornerRadius(12)
-    }
-    
-    private func updateSelection(at position: CGFloat, in width: CGFloat) {
-        let stepWidth = width / CGFloat(intervals.count - 1)
-        let index = Int(round(position / stepWidth))
-        let boundedIndex = max(0, min(index, intervals.count - 1))
-        selection = intervals[boundedIndex]
-    }
-}
-
-struct TimelineMarker: View {
-    let interval: Int
-    let isSelected: Bool
-    let width: CGFloat
-    let intervals: [Int]
-    
-    var body: some View {
-        if let index = intervals.firstIndex(of: interval) {
-            let position = (CGFloat(index) / CGFloat(intervals.count - 1)) * (width - 40)
-            VStack(spacing: 4) {
-                Rectangle()
-                    .fill(isSelected ? Color.accentColor : Color.secondary)
-                    .frame(width: 2, height: 10)
-                Text("\(interval)h")
-                    .font(.caption)
-                    .foregroundColor(isSelected ? .accentColor : .secondary)
-            }
-            .offset(x: position + 20)
-        }
+        .padding(.vertical, 8)
     }
 }
 

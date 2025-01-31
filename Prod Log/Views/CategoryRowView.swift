@@ -4,8 +4,21 @@ struct CategoryRowView: View {
     let category: Category
     let percentage: Double
     let isExpanded: Bool
+    let timeInterval: Double
     let onTap: () -> Void
     let onSliderChange: (Double) -> Void
+    
+    private var timeString: String {
+        let totalMinutes = (timeInterval * 60.0) * (percentage / 100.0)
+        let hours = Int(totalMinutes / 60.0)
+        let minutes = Int(totalMinutes.truncatingRemainder(dividingBy: 60.0))
+        
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes)m"
+        }
+    }
     
     var body: some View {
         VStack(spacing: 8) {
@@ -18,7 +31,7 @@ struct CategoryRowView: View {
                 
                 Spacer()
                 
-                Text("\(Int(percentage))%")
+                Text("\(Int(percentage))% (\(timeString))")
                     .foregroundColor(.secondary)
                 
                 Image(systemName: "chevron.right")

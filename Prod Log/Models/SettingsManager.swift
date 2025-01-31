@@ -22,6 +22,14 @@ class SettingsManager: ObservableObject {
     @Published private var loggedTimeSlots: [TimeSlot] = []
     @Published private var completedCards: [LogCard] = []
     
+    static let defaultCategories = [
+        Category(name: "Sleep", color: .blue, pointsPerMinute: 5, isDefault: true),
+        Category(name: "Work", color: .green, pointsPerMinute: 5, isDefault: true),
+        Category(name: "Physical Activity", color: .orange, pointsPerMinute: 5, isDefault: true),
+        Category(name: "Relax", color: .purple, pointsPerMinute: 5, isDefault: true),
+        Category(name: "Learning", color: .red, pointsPerMinute: 5, isDefault: true)
+    ]
+    
     init() {
         // Initialize all stored properties first
         self.categories = []
@@ -407,5 +415,11 @@ class SettingsManager: ObservableObject {
         
         saveCompletedCards()
         saveDailyPoints()
+    }
+    
+    func resetToDefaultCategories() {
+        categories = Self.defaultCategories
+        saveCategories()
+        objectWillChange.send()
     }
 } 

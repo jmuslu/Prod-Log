@@ -29,6 +29,7 @@ struct CategorySelectionView: View {
                     activeCategories: activeCategories,
                     categoryPercentages: categoryPercentages,
                     expandedCategory: expandedCategory,
+                    timeInterval: card.endTime.timeIntervalSince(card.startTime) / 3600,
                     onToggle: toggleCategory,
                     onPercentageChange: updatePercentage
                 )
@@ -127,6 +128,7 @@ private struct CategoryListView: View {
     let activeCategories: [Category]
     let categoryPercentages: [Category: Double]
     let expandedCategory: Category?
+    let timeInterval: Double
     let onToggle: (Category) -> Void
     let onPercentageChange: (Category, Double) -> Void
     
@@ -141,8 +143,11 @@ private struct CategoryListView: View {
                     category: category,
                     percentage: categoryPercentages[category] ?? 0,
                     isExpanded: expandedCategory == category,
+                    timeInterval: timeInterval,
                     onTap: { onToggle(category) },
-                    onSliderChange: { onPercentageChange(category, $0) }
+                    onSliderChange: { value in
+                        onPercentageChange(category, value)
+                    }
                 )
             }
         }
