@@ -18,19 +18,14 @@ struct SettingsView: View {
                 
                 Section(header: Text("Categories")) {
                     ForEach(settingsManager.categories) { category in
-                        CategoryRow(category: category)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                editingCategory = category
-                                showingCategorySheet = true
-                            }
-                    }
-                    .onDelete { indexSet in
-                        for index in indexSet {
-                            let category = settingsManager.categories[index]
-                            if !category.isDefault {
-                                settingsManager.removeCategory(category)
-                            }
+                        HStack {
+                            Circle()
+                                .fill(category.color)
+                                .frame(width: 20, height: 20)
+                            Text(category.name)
+                            Spacer()
+                            Text("\(category.pointsPerMinuteInt) pts/min")
+                                .foregroundColor(.secondary)
                         }
                     }
                     
@@ -38,7 +33,7 @@ struct SettingsView: View {
                         editingCategory = nil
                         showingCategorySheet = true
                     }) {
-                        Label("Add Category", systemImage: "plus")
+                        Label("Add Category", systemImage: "plus.circle.fill")
                     }
                 }
                 
