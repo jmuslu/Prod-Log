@@ -1,10 +1,22 @@
 import SwiftUI
 
 class SettingsManager: ObservableObject {
-    @Published var timeInterval: Double
+    @Published var timeInterval: Double {
+        didSet {
+            UserDefaults.standard.set(timeInterval, forKey: "timeInterval")
+        }
+    }
     @Published var categories: [Category]
-    @Published private var dailyPoints: [Date: Int]
-    @Published private var categoryPoints: [Date: [Category: Int]]
+    @Published private var dailyPoints: [Date: Int] {
+        didSet {
+            saveDailyPoints()
+        }
+    }
+    @Published private var categoryPoints: [Date: [String: Int]] {
+        didSet {
+            saveCategoryPoints()
+        }
+    }
     
     let availableIntervals = [1.0, 2.0, 3.0, 4.0, 6.0, 12.0]
     
@@ -31,19 +43,16 @@ class SettingsManager: ObservableObject {
     ]
     
     init() {
-        // Initialize all stored properties first
         self.categories = []
         self.dailyPoints = [:]
         self.categoryPoints = [:]
         self.timeInterval = UserDefaults.standard.double(forKey: "timeInterval")
         
-        // Set default time interval if needed
         if self.timeInterval == 0 {
             self.timeInterval = 3.0
             UserDefaults.standard.set(self.timeInterval, forKey: "timeInterval")
         }
         
-        // Load saved data
         loadCategories()
         loadDailyPoints()
         loadCategoryPoints()
@@ -144,7 +153,7 @@ class SettingsManager: ObservableObject {
             // Update points data to remove the deleted category
             for (date, points) in categoryPoints {
                 var updatedPoints = points
-                updatedPoints.removeValue(forKey: category)
+                updatedPoints.removeValue(forKey: category.name)
                 categoryPoints[date] = updatedPoints
             }
             
@@ -207,10 +216,10 @@ class SettingsManager: ObservableObject {
             
             // Update points data with the new category
             for (date, points) in categoryPoints {
-                if let value = points[categories[index]] {
+                if let value = points[category.name] {
                     var updatedPoints = points
-                    updatedPoints.removeValue(forKey: categories[index])
-                    updatedPoints[category] = value
+                    updatedPoints.removeValue(forKey: category.name)
+                    updatedPoints[category.name] = value
                     categoryPoints[date] = updatedPoints
                 }
             }
@@ -231,17 +240,19 @@ class SettingsManager: ObservableObject {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         
-        // Save total points
+        // Update daily points
         dailyPoints[startOfDay, default: 0] += points
         
-        // Save category points
-        var categoryPointsForDay = categoryPoints[startOfDay] ?? [:]
+        // Update category points using category names as keys
+        var dayCategories = categoryPoints[startOfDay] ?? [:]
         for (category, percentage) in categories {
-            let categoryPoints = Int(Double(points) * percentage / 100.0)
-            categoryPointsForDay[category, default: 0] += categoryPoints
+            let categoryPoints = Int(Double(points) * (percentage / 100.0))
+            dayCategories[category.name, default: 0] += categoryPoints
         }
-        categoryPoints[startOfDay] = categoryPointsForDay
+        categoryPoints[startOfDay] = dayCategories
         
+        saveDailyPoints()
+        saveCategoryPoints()
         objectWillChange.send()
     }
     
@@ -251,13 +262,18 @@ class SettingsManager: ObservableObject {
         return dailyPoints[startOfDay] ?? 0
     }
     
-    func getCategoryPoints(for date: Date) -> [(Category, Int)] {
+    func getCategoryPoints(for date: Date) -> [Category: Int] {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
-        let pointsForDay = categoryPoints[startOfDay] ?? [:]
-        return categories.map { category in
-            (category, pointsForDay[category] ?? 0)
+        let stringPoints = categoryPoints[startOfDay] ?? [:]
+        
+        var result: [Category: Int] = [:]
+        for category in categories {
+            if let points = stringPoints[category.name] {
+                result[category] = points
+            }
         }
+        return result
     }
     
     func isTimeSlotLogged(start: Date, end: Date) -> Bool {
@@ -349,7 +365,7 @@ class SettingsManager: ObservableObject {
     
     private func loadCategoryPoints() {
         if let saved = UserDefaults.standard.data(forKey: "categoryPoints"),
-           let decoded = try? JSONDecoder().decode([Date: [Category: Int]].self, from: saved) {
+           let decoded = try? JSONDecoder().decode([Date: [String: Int]].self, from: saved) {
             categoryPoints = decoded
         }
     }
