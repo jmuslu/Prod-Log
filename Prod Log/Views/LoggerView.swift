@@ -68,6 +68,9 @@ struct LoggerView: View {
         .onChange(of: settingsManager.timeInterval) { _ in
             restartLogging()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .resetLogCards)) { _ in
+            handleReset()
+        }
     }
     
     private var incompletedCards: [LogCard] {
@@ -187,6 +190,18 @@ struct LoggerView: View {
         cardTimer?.invalidate()
         startLogging()
         updateTimerDisplay()
+    }
+    
+    private func handleReset() {
+        let calendar = Calendar.current
+        let now = Date()
+        let thirtySixHoursAgo = calendar.date(byAdding: .hour, value: -36, to: now)!
+        
+        // Clear all completed cards from the last 36 hours
+        settingsManager.clearCompletedCards(since: thirtySixHoursAgo)
+        
+        // Regenerate all cards for the last 36 hours
+        startLogging()
     }
 }
 

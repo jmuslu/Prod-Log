@@ -271,18 +271,29 @@ class SettingsManager: ObservableObject {
     
     func resetTodayPoints() {
         let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
+        let now = Date()
+        let thirtySixHoursAgo = calendar.date(byAdding: .hour, value: -36, to: now)!
         
-        // Remove today's points and completed cards
-        dailyPoints.removeValue(forKey: today)
-        categoryPoints.removeValue(forKey: today)
-        completedCards.removeAll { card in
-            calendar.isDateInToday(card.startTime)
+        // Remove points and completed cards for the entire 36-hour window
+        let startOfWindow = calendar.startOfDay(for: thirtySixHoursAgo)
+        
+        // Clear points for all affected days
+        var currentDate = startOfWindow
+        while currentDate <= now {
+            let dayStart = calendar.startOfDay(for: currentDate)
+            dailyPoints.removeValue(forKey: dayStart)
+            categoryPoints.removeValue(forKey: dayStart)
+            currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate)!
         }
         
-        // Remove today's logged time slots
+        // Clear completed cards within the window
+        completedCards.removeAll { card in
+            card.startTime >= thirtySixHoursAgo
+        }
+        
+        // Remove logged time slots within the window
         loggedTimeSlots = loggedTimeSlots.filter { slot in
-            !calendar.isDateInToday(slot.start)
+            slot.start < thirtySixHoursAgo
         }
         
         // Save all changes
