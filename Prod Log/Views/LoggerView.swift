@@ -72,11 +72,13 @@ struct LoggerView: View {
     
     private var incompletedCards: [LogCard] {
         let now = Date()
+        let calendar = Calendar.current
+        let thirtySixHoursAgo = calendar.date(byAdding: .hour, value: -36, to: now)!
+        
         return logCards
             .filter { !$0.isComplete }
             .filter { card in
-                let calendar = Calendar.current
-                return calendar.isDateInToday(card.startTime) && 
+                return card.startTime >= thirtySixHoursAgo && 
                        card.endTime <= now // Only show completely elapsed time slots
             }
             .sorted { $0.startTime < $1.startTime }
@@ -84,7 +86,11 @@ struct LoggerView: View {
     
     private var completedCards: [LogCard] {
         let calendar = Calendar.current
-        return settingsManager.getCompletedCards(for: Date())
+        let now = Date()
+        let thirtySixHoursAgo = calendar.date(byAdding: .hour, value: -36, to: now)!
+        
+        return settingsManager.getAllCompletedCards()
+            .filter { $0.startTime >= thirtySixHoursAgo }
             .sorted { $0.startTime > $1.startTime }
     }
     
@@ -135,7 +141,7 @@ struct LoggerView: View {
     private func startLogging() {
         let calendar = Calendar.current
         let now = Date()
-        let startOfDay = calendar.startOfDay(for: now)
+        let thirtySixHoursAgo = calendar.date(byAdding: .hour, value: -36, to: now)!
         
         // Keep completed cards in memory but mark them as reset if needed
         let completedCards = logCards.filter { $0.isComplete }
@@ -144,16 +150,20 @@ struct LoggerView: View {
         var newCards: [LogCard] = []
         let intervalHours = Int(settingsManager.timeInterval)
         
-        for hour in stride(from: 0, to: 24, by: intervalHours) {
-            var startComponents = calendar.dateComponents([.year, .month, .day], from: startOfDay)
-            startComponents.hour = hour
-            let startDate = calendar.date(from: startComponents)!
-            let endDate = calendar.date(byAdding: .hour, value: intervalHours, to: startDate)!
+        // Calculate start time (36 hours ago)
+        let startTime = calendar.startOfDay(for: thirtySixHoursAgo)
+        
+        // Generate time slots from 36 hours ago until now
+        var currentTime = startTime
+        while currentTime <= now {
+            let endTime = calendar.date(byAdding: .hour, value: intervalHours, to: currentTime)!
             
-            if endDate <= now {
-                let newCard = LogCard(startTime: startDate, endTime: endDate)
+            if endTime <= now {
+                let newCard = LogCard(startTime: currentTime, endTime: endTime)
                 newCards.append(newCard)
             }
+            
+            currentTime = endTime
         }
         
         // Update the cards list

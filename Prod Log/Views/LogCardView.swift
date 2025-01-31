@@ -9,10 +9,24 @@ struct LogCardView: View {
         return "\(formatter.string(from: card.startTime)) - \(formatter.string(from: card.endTime))"
     }
     
+    var dateText: String {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        
+        if calendar.isDateInToday(card.startTime) {
+            return "Today"
+        } else if calendar.isDateInYesterday(card.startTime) {
+            return "Yesterday"
+        } else {
+            formatter.dateFormat = "MMM d"
+            return formatter.string(from: card.startTime)
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
-                Text(card.startTime, style: .date)
+                Text(dateText)
                     .font(.headline)
                 Spacer()
                 Text(timeSlotText)
