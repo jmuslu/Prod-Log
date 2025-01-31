@@ -25,6 +25,11 @@ struct Category: Identifiable, Codable, Hashable {
         Category(name: "Relax", color: .teal, pointsPerMinute: 5, isDefault: true)
     ]
     
+    // Add computed property to always return integer points
+    var pointsPerMinuteInt: Int {
+        Int(pointsPerMinute)
+    }
+    
     // Implement Hashable
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)

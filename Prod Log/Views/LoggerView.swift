@@ -8,6 +8,7 @@ struct LoggerView: View {
     @State private var cardTimer: Timer?
     @State private var nextCardDate: Date?
     @State private var timerString: String = ""
+    private let displayTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     var body: some View {
         NavigationView {
@@ -37,49 +38,32 @@ struct LoggerView: View {
                     }
                 }
                 
-                // Completed cards inline
+                // Completed cards inline with transparency
                 if !completedCards.isEmpty {
                     Section(header: Text("Completed")) {
                         ForEach(completedCards) { card in
                             CompletedLogCardView(card: card)
-                                .opacity(0.7) // Make completed cards slightly transparent
+                                .opacity(0.7)
                         }
                     }
                 }
             }
             .navigationTitle("Logger")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        startLogging()
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-            }
-            .sheet(isPresented: $showingCategorySheet) {
-                if let card = selectedCard {
-                    CategorySelectionView(card: card, logCards: $logCards)
-                }
+        }
+        .sheet(isPresented: $showingCategorySheet) {
+            if let card = selectedCard {
+                CategorySelectionView(card: card, logCards: $logCards)
             }
         }
         .onAppear {
             startLogging()
             updateTimerDisplay()
-            
-            // Add observer for reset notification
-            NotificationCenter.default.addObserver(
-                forName: .resetLogCards,
-                object: nil,
-                queue: .main
-            ) { _ in
-                restartLogging()
-            }
+        }
+        .onReceive(displayTimer) { _ in
+            updateTimerDisplay()
         }
         .onDisappear {
             cardTimer?.invalidate()
-            // Remove observer
-            NotificationCenter.default.removeObserver(self)
         }
         .onChange(of: settingsManager.timeInterval) { _ in
             restartLogging()

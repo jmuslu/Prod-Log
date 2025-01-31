@@ -166,7 +166,7 @@ struct CategoryEditSheet: View {
     @EnvironmentObject var settingsManager: SettingsManager
     @State private var name: String = ""
     @State private var color: Color = .blue
-    @State private var pointsPerMinute: Double = 1.0
+    @State private var pointsPerMinute: Int = 1
     
     var body: some View {
         NavigationView {
@@ -175,8 +175,8 @@ struct CategoryEditSheet: View {
                 
                 ColorPicker("Color", selection: $color)
                 
-                Stepper(value: $pointsPerMinute, in: 0.5...10.0, step: 0.5) {
-                    Text("Points per minute: \(pointsPerMinute, specifier: "%.1f")")
+                Stepper(value: $pointsPerMinute, in: 1...20) {
+                    Text("Points per minute: \(pointsPerMinute)")
                 }
             }
             .navigationTitle(category == nil ? "New Category" : "Edit Category")
@@ -199,19 +199,18 @@ struct CategoryEditSheet: View {
             if let category = category {
                 name = category.name
                 color = category.color
-                pointsPerMinute = category.pointsPerMinute
+                pointsPerMinute = Int(category.pointsPerMinute)
             }
         }
     }
     
     private func saveCategory() {
         if let existingCategory = category {
-            // Create updated category
             let updatedCategory = Category(
                 id: existingCategory.id,
                 name: name,
                 color: color,
-                pointsPerMinute: pointsPerMinute,
+                pointsPerMinute: Double(pointsPerMinute),
                 isDefault: existingCategory.isDefault,
                 deletedDate: existingCategory.deletedDate
             )
@@ -220,7 +219,7 @@ struct CategoryEditSheet: View {
             let newCategory = Category(
                 name: name,
                 color: color,
-                pointsPerMinute: pointsPerMinute,
+                pointsPerMinute: Double(pointsPerMinute),
                 isDefault: false
             )
             settingsManager.addCategory(newCategory)
@@ -241,7 +240,7 @@ struct CategoryRow: View {
             
             Spacer()
             
-            Text("\(Int(category.pointsPerMinute)) pts/min")
+            Text("\(category.pointsPerMinuteInt) pts/min")
                 .foregroundColor(.secondary)
             
             Image(systemName: "chevron.right")

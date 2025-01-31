@@ -196,7 +196,19 @@ class SettingsManager: ObservableObject {
     func updateCategory(_ category: Category) {
         if let index = categories.firstIndex(where: { $0.id == category.id }) {
             categories[index] = category
+            
+            // Update points data with the new category
+            for (date, points) in categoryPoints {
+                if let value = points[categories[index]] {
+                    var updatedPoints = points
+                    updatedPoints.removeValue(forKey: categories[index])
+                    updatedPoints[category] = value
+                    categoryPoints[date] = updatedPoints
+                }
+            }
+            
             saveCategories()
+            saveCategoryPoints()
             objectWillChange.send()
         }
     }
