@@ -144,27 +144,28 @@ struct LoggerView: View {
     private func startLogging() {
         let calendar = Calendar.current
         let now = Date()
-        let thirtySixHoursAgo = calendar.date(byAdding: .hour, value: -36, to: now)!
         
-        // Get all completed cards from the last 36 hours
+        // Calculate yesterday's noon (12 PM)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
+        let yesterdayNoon = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: yesterday)!
+        
+        // Get completed cards since yesterday noon
         let completedTimeSlots = settingsManager.getAllCompletedCards()
-            .filter { $0.startTime >= thirtySixHoursAgo }
+            .filter { $0.startTime >= yesterdayNoon }
             .map { (start: $0.startTime, end: $0.endTime) }
         
         // Generate new cards for elapsed time slots
         var newCards: [LogCard] = []
         let intervalHours = Int(settingsManager.timeInterval)
         
-        // Calculate start time (start of day for 36 hours ago)
-        let startTime = calendar.startOfDay(for: thirtySixHoursAgo)
+        // Start from yesterday noon
+        var currentTime = yesterdayNoon
         
-        // Generate time slots from start of day until now
-        var currentTime = startTime
         while currentTime <= now {
             let endTime = calendar.date(byAdding: .hour, value: intervalHours, to: currentTime)!
             
-            // Only create cards that fall within the 36-hour window
-            if endTime <= now && currentTime >= thirtySixHoursAgo {
+            // Only create cards for elapsed time slots
+            if endTime <= now {
                 // Check if this time slot overlaps with any completed cards
                 let isTimeSlotCompleted = completedTimeSlots.contains { completedSlot in
                     let slotStart = completedSlot.start
