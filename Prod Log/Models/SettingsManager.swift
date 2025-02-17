@@ -18,7 +18,8 @@ class SettingsManager: ObservableObject {
         }
     }
     
-    let availableIntervals = [1.0, 2.0, 3.0, 4.0, 6.0, 12.0]
+    static let autoInterval: Double = -1  // Special value to indicate auto mode
+    let availableIntervals = [-1.0, 1.0, 2.0, 3.0, 4.0, 6.0, 12.0]  // Add auto option (-1)
     
     // Create a struct to handle time slot encoding/decoding
     private struct TimeSlot: Codable {
@@ -94,23 +95,32 @@ class SettingsManager: ObservableObject {
     func getCurrentTimeSlot() -> (start: Date, end: Date)? {
         let calendar = Calendar.current
         let now = Date()
-        let hour = calendar.component(.hour, from: now)
-        let intervalHours = Int(timeInterval)
         
-        // Calculate the current slot
-        let currentSlot = (hour / intervalHours) * intervalHours
-        
-        var startComponents = calendar.dateComponents([.year, .month, .day], from: now)
-        startComponents.hour = currentSlot
-        startComponents.minute = 0
-        startComponents.second = 0
-        
-        let startDate = calendar.date(from: startComponents)!
-        let endDate = calendar.date(byAdding: .hour, value: intervalHours, to: startDate)!
-        
-        // Return the slot if we're currently in it
-        if now >= startDate && now < endDate {
-            return (startDate, endDate)
+        if timeInterval == Self.autoInterval {
+            // For auto mode, find the current slot by looking at generated cards
+            let cards = generateLogCards()
+            return cards.first { card in
+                now >= card.startTime && now < card.endTime
+            }.map { ($0.startTime, $0.endTime) }
+        } else {
+            let hour = calendar.component(.hour, from: now)
+            let intervalHours = Int(timeInterval)
+            
+            // Calculate the current slot
+            let currentSlot = (hour / intervalHours) * intervalHours
+            
+            var startComponents = calendar.dateComponents([.year, .month, .day], from: now)
+            startComponents.hour = currentSlot
+            startComponents.minute = 0
+            startComponents.second = 0
+            
+            let startDate = calendar.date(from: startComponents)!
+            let endDate = calendar.date(byAdding: .hour, value: intervalHours, to: startDate)!
+            
+            // Return the slot if we're currently in it
+            if now >= startDate && now < endDate {
+                return (startDate, endDate)
+            }
         }
         return nil
     }
@@ -437,5 +447,88 @@ class SettingsManager: ObservableObject {
         categories = Self.defaultCategories
         saveCategories()
         objectWillChange.send()
+    }
+    
+    func generateLogCards() -> [LogCard] {
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Calculate yesterday's noon (12 PM)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
+        let yesterdayNoon = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: yesterday)!
+        
+        // Get completed cards since yesterday noon
+        let completedTimeSlots = getAllCompletedCards()
+            .filter { $0.startTime >= yesterdayNoon }
+            .map { (start: $0.startTime, end: $0.endTime) }
+        
+        // Generate new cards for elapsed time slots
+        var newCards: [LogCard] = []
+        var currentTime = yesterdayNoon
+        
+        while currentTime <= now {
+            if timeInterval == Self.autoInterval {
+                // Auto mode: Find the largest possible interval
+                let endTime = findLargestPossibleInterval(from: currentTime, completedSlots: completedTimeSlots, now: now)
+                if endTime <= now && !isTimeSlotOverlapping(start: currentTime, end: endTime, completedSlots: completedTimeSlots) {
+                    newCards.append(LogCard(startTime: currentTime, endTime: endTime))
+                }
+                currentTime = endTime
+            } else {
+                // Fixed interval mode: Try larger intervals first, then fall back to selected interval
+                let possibleIntervals = [12, 6, 4, 3, 2, 1]
+                var foundInterval = false
+                
+                // Only try larger intervals if they're divisible by the selected interval
+                let selectedInterval = Int(timeInterval)
+                let validLargerIntervals = possibleIntervals.filter { $0 >= selectedInterval && $0 % selectedInterval == 0 }
+                
+                for intervalHours in validLargerIntervals {
+                    let potentialEndTime = calendar.date(byAdding: .hour, value: intervalHours, to: currentTime)!
+                    
+                    if potentialEndTime <= now && !isTimeSlotOverlapping(start: currentTime, end: potentialEndTime, completedSlots: completedTimeSlots) {
+                        newCards.append(LogCard(startTime: currentTime, endTime: potentialEndTime))
+                        currentTime = potentialEndTime
+                        foundInterval = true
+                        break
+                    }
+                }
+                
+                if !foundInterval {
+                    // If no larger interval works, use the selected interval
+                    let endTime = calendar.date(byAdding: .hour, value: selectedInterval, to: currentTime)!
+                    if endTime <= now && !isTimeSlotOverlapping(start: currentTime, end: endTime, completedSlots: completedTimeSlots) {
+                        newCards.append(LogCard(startTime: currentTime, endTime: endTime))
+                    }
+                    currentTime = endTime
+                }
+            }
+        }
+        
+        return newCards.sorted { $0.startTime > $1.startTime }
+    }
+    
+    private func findLargestPossibleInterval(from startTime: Date, completedSlots: [(start: Date, end: Date)], now: Date) -> Date {
+        let calendar = Calendar.current
+        let possibleIntervals = [12, 6, 4, 3, 2, 1] // Ordered from largest to smallest
+        
+        for intervalHours in possibleIntervals {
+            let potentialEndTime = calendar.date(byAdding: .hour, value: intervalHours, to: startTime)!
+            
+            if !isTimeSlotOverlapping(start: startTime, end: potentialEndTime, completedSlots: completedSlots) && potentialEndTime <= now {
+                return potentialEndTime
+            }
+        }
+        
+        // If no larger interval works, return the minimum 1-hour interval
+        return calendar.date(byAdding: .hour, value: 1, to: startTime)!
+    }
+    
+    private func isTimeSlotOverlapping(start: Date, end: Date, completedSlots: [(start: Date, end: Date)]) -> Bool {
+        return completedSlots.contains { completedSlot in
+            let slotStart = completedSlot.start
+            let slotEnd = completedSlot.end
+            return !(end <= slotStart || start >= slotEnd)
+        }
     }
 } 

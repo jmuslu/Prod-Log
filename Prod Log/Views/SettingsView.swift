@@ -18,20 +18,11 @@ struct SettingsView: View {
                 
                 Section(header: Text("Categories")) {
                     ForEach(settingsManager.categories) { category in
-                        HStack {
-                            Circle()
-                                .fill(category.color)
-                                .frame(width: 20, height: 20)
-                            Text(category.name)
-                            Spacer()
-                            Text("\(category.pointsPerMinuteInt) pts/min")
-                                .foregroundColor(.secondary)
-                            Button(action: {
-                                settingsManager.removeCategory(category)
-                            }) {
-                                Image(systemName: "trash")
-                                    .foregroundColor(.red)
-                            }
+                        CategoryRow(category: category)
+                    }
+                    .onDelete { indexSet in
+                        for index in indexSet {
+                            settingsManager.removeCategory(settingsManager.categories[index])
                         }
                     }
                     
@@ -90,7 +81,7 @@ struct TimeIntervalPicker: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(selection) hour\(selection == 1 ? "" : "s") between log cards")
+            Text(intervalText)
                 .font(.headline)
                 .foregroundColor(.primary)
             
@@ -100,7 +91,7 @@ struct TimeIntervalPicker: View {
                         Button(action: {
                             selection = interval
                         }) {
-                            Text("\(interval)h")
+                            Text(interval == -1 ? "Auto" : "\(interval)h")
                                 .font(.system(.body, design: .rounded))
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
@@ -122,6 +113,14 @@ struct TimeIntervalPicker: View {
             }
         }
         .padding(.vertical, 8)
+    }
+    
+    private var intervalText: String {
+        if selection == -1 {
+            return "Automatic intervals (maximizes card sizes)"
+        } else {
+            return "\(selection) hour\(selection == 1 ? "" : "s") between log cards"
+        }
     }
 }
 
@@ -200,15 +199,9 @@ struct CategoryRow: View {
             Circle()
                 .fill(category.color)
                 .frame(width: 20, height: 20)
-            
             Text(category.name)
-            
             Spacer()
-            
             Text("\(category.pointsPerMinuteInt) pts/min")
-                .foregroundColor(.secondary)
-            
-            Image(systemName: "chevron.right")
                 .foregroundColor(.secondary)
         }
     }
