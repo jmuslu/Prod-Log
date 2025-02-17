@@ -175,9 +175,10 @@ struct LoggerView: View {
     }
 }
 
-// Add a new view for completed cards
+// Update CompletedLogCardView
 struct CompletedLogCardView: View {
     let card: LogCard
+    @EnvironmentObject var settingsManager: SettingsManager
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -210,8 +211,6 @@ struct CompletedLogCardView: View {
     }
     
     private var timeText: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        return "\(formatter.string(from: card.startTime)) - \(formatter.string(from: card.endTime))"
+        return settingsManager.formatTimeRange(start: card.startTime, end: card.endTime)
     }
 } 

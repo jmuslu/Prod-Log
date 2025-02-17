@@ -2,24 +2,36 @@ import SwiftUI
 
 struct LogCardView: View {
     let card: LogCard
+    @EnvironmentObject var settingsManager: SettingsManager
     
     var timeSlotText: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        return "\(formatter.string(from: card.startTime)) - \(formatter.string(from: card.endTime))"
+        return settingsManager.formatTimeRange(start: card.startTime, end: card.endTime)
     }
     
     var dateText: String {
         let calendar = Calendar.current
         let formatter = DateFormatter()
         
-        if calendar.isDateInToday(card.startTime) {
-            return "Today"
-        } else if calendar.isDateInYesterday(card.startTime) {
-            return "Yesterday"
+        let startDay = calendar.startOfDay(for: card.startTime)
+        let endDay = calendar.startOfDay(for: card.endTime)
+        
+        if startDay == endDay {
+            if calendar.isDateInToday(startDay) {
+                return "Today"
+            } else if calendar.isDateInYesterday(startDay) {
+                return "Yesterday"
+            } else {
+                formatter.dateFormat = "MMM d"
+                return formatter.string(from: startDay)
+            }
         } else {
-            formatter.dateFormat = "MMM d"
-            return formatter.string(from: card.startTime)
+            // Spans multiple days
+            if calendar.isDateInToday(endDay) && calendar.isDateInYesterday(startDay) {
+                return "Yesterday - Today"
+            } else {
+                formatter.dateFormat = "MMM d"
+                return "\(formatter.string(from: startDay)) - \(formatter.string(from: endDay))"
+            }
         }
     }
     
@@ -36,7 +48,7 @@ struct LogCardView: View {
             
             if !card.categories.isEmpty {
                 HStack(spacing: 4) {
-                    ForEach(Array(card.categories.keys), id: \.id) { category in
+                    ForEach(Array(card.categories.keys.sorted(by: { $0.name < $1.name })), id: \.id) { category in
                         if let percentage = card.categories[category] {
                             Text("\(category.name): \(Int(percentage))%")
                                 .font(.caption)

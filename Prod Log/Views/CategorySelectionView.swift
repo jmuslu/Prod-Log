@@ -73,9 +73,7 @@ struct CategorySelectionView: View {
     }
     
     private var timeSlotText: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        return "\(formatter.string(from: card.startTime)) - \(formatter.string(from: card.endTime))"
+        return settingsManager.formatTimeRange(start: card.startTime, end: card.endTime)
     }
     
     private var totalPercentage: Double {

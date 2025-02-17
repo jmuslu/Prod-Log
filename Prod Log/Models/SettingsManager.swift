@@ -6,6 +6,11 @@ class SettingsManager: ObservableObject {
             UserDefaults.standard.set(timeInterval, forKey: "timeInterval")
         }
     }
+    @Published var use24HourTime: Bool {
+        didSet {
+            UserDefaults.standard.set(use24HourTime, forKey: "use24HourTime")
+        }
+    }
     @Published var categories: [Category]
     @Published private var dailyPoints: [Date: Int] {
         didSet {
@@ -48,6 +53,7 @@ class SettingsManager: ObservableObject {
         self.dailyPoints = [:]
         self.categoryPoints = [:]
         self.timeInterval = UserDefaults.standard.double(forKey: "timeInterval")
+        self.use24HourTime = UserDefaults.standard.bool(forKey: "use24HourTime")
         
         if self.timeInterval == 0 {
             self.timeInterval = 3.0
@@ -475,22 +481,22 @@ class SettingsManager: ObservableObject {
                 }
                 currentTime = endTime
             } else {
-                // Fixed interval mode: Try larger intervals first, then fall back to selected interval
-                let possibleIntervals = [12, 6, 4, 3, 2, 1]
+                // Fixed interval mode: Try larger intervals first
+                let selectedInterval = Int(timeInterval)
                 var foundInterval = false
                 
-                // Only try larger intervals if they're divisible by the selected interval
-                let selectedInterval = Int(timeInterval)
-                let validLargerIntervals = possibleIntervals.filter { $0 >= selectedInterval && $0 % selectedInterval == 0 }
+                // Calculate the maximum possible interval that's a multiple of the selected interval
+                let maxHours = min(24, ((now.timeIntervalSince(currentTime) / 3600).rounded(.down)))
+                let maxValidInterval = Int(maxHours) - (Int(maxHours) % selectedInterval)
                 
-                for intervalHours in validLargerIntervals {
-                    let potentialEndTime = calendar.date(byAdding: .hour, value: intervalHours, to: currentTime)!
+                // Try the largest possible interval first
+                if maxValidInterval >= selectedInterval {
+                    let potentialEndTime = calendar.date(byAdding: .hour, value: maxValidInterval, to: currentTime)!
                     
                     if potentialEndTime <= now && !isTimeSlotOverlapping(start: currentTime, end: potentialEndTime, completedSlots: completedTimeSlots) {
                         newCards.append(LogCard(startTime: currentTime, endTime: potentialEndTime))
                         currentTime = potentialEndTime
                         foundInterval = true
-                        break
                     }
                 }
                 
@@ -530,5 +536,41 @@ class SettingsManager: ObservableObject {
             let slotEnd = completedSlot.end
             return !(end <= slotStart || start >= slotEnd)
         }
+    }
+    
+    func getTimeFormatString() -> String {
+        return use24HourTime ? "HH:mm" : "h:mm a"
+    }
+    
+    func formatTimeRange(start: Date, end: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = getTimeFormatString()
+        
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: start)
+        let endDay = calendar.startOfDay(for: end)
+        
+        if startDay == endDay {
+            // Same day
+            return "\(formatter.string(from: start)) - \(formatter.string(from: end))"
+        } else {
+            // Different days
+            if calendar.date(byAdding: .day, value: 1, to: startDay) == endDay {
+                // Consecutive days (overnight)
+                return "\(formatter.string(from: start)) - \(formatter.string(from: end)) (overnight)"
+            } else {
+                // Multiple days
+                let dayFormatter = DateFormatter()
+                dayFormatter.dateFormat = "MMM d"
+                return "\(formatter.string(from: start)) \(dayFormatter.string(from: start)) - \(formatter.string(from: end)) \(dayFormatter.string(from: end))"
+            }
+        }
+    }
+    
+    // Add a helper method for formatting single times
+    func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = getTimeFormatString()
+        return formatter.string(from: date)
     }
 } 

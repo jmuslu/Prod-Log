@@ -16,6 +16,10 @@ struct SettingsView: View {
                     ), intervals: settingsManager.availableIntervals.map { Int($0) })
                 }
                 
+                Section(header: Text("Display Settings")) {
+                    Toggle("24-Hour Time", isOn: $settingsManager.use24HourTime)
+                }
+                
                 Section(header: Text("Categories")) {
                     ForEach(settingsManager.categories) { category in
                         CategoryRow(category: category)
