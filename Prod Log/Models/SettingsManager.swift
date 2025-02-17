@@ -413,8 +413,25 @@ class SettingsManager: ObservableObject {
     }
     
     func addCompletedCard(_ card: LogCard) {
+        // Remove any existing cards that overlap with this one
+        completedCards.removeAll { existingCard in
+            let overlap = !(card.endTime <= existingCard.startTime || card.startTime >= existingCard.endTime)
+            return overlap
+        }
+        
+        // Add the new card
         completedCards.append(card)
+        
+        // Sort cards by start time
+        completedCards.sort { $0.startTime > $1.startTime }
+        
+        // Save to UserDefaults
         saveCompletedCards()
+        
+        // Add to logged time slots
+        let timeSlot = TimeSlot(start: card.startTime, end: card.endTime)
+        loggedTimeSlots.append(timeSlot)
+        saveLoggedTimeSlots()
     }
     
     func getCompletedCards(for date: Date) -> [LogCard] {
@@ -481,33 +498,14 @@ class SettingsManager: ObservableObject {
                 }
                 currentTime = endTime
             } else {
-                // Fixed interval mode: Try larger intervals first
-                let selectedInterval = Int(timeInterval)
-                var foundInterval = false
+                // Fixed interval mode (simplified)
+                let intervalHours = Int(timeInterval)
+                let endTime = calendar.date(byAdding: .hour, value: intervalHours, to: currentTime)!
                 
-                // Calculate the maximum possible interval that's a multiple of the selected interval
-                let maxHours = min(24, ((now.timeIntervalSince(currentTime) / 3600).rounded(.down)))
-                let maxValidInterval = Int(maxHours) - (Int(maxHours) % selectedInterval)
-                
-                // Try the largest possible interval first
-                if maxValidInterval >= selectedInterval {
-                    let potentialEndTime = calendar.date(byAdding: .hour, value: maxValidInterval, to: currentTime)!
-                    
-                    if potentialEndTime <= now && !isTimeSlotOverlapping(start: currentTime, end: potentialEndTime, completedSlots: completedTimeSlots) {
-                        newCards.append(LogCard(startTime: currentTime, endTime: potentialEndTime))
-                        currentTime = potentialEndTime
-                        foundInterval = true
-                    }
+                if endTime <= now && !isTimeSlotOverlapping(start: currentTime, end: endTime, completedSlots: completedTimeSlots) {
+                    newCards.append(LogCard(startTime: currentTime, endTime: endTime))
                 }
-                
-                if !foundInterval {
-                    // If no larger interval works, use the selected interval
-                    let endTime = calendar.date(byAdding: .hour, value: selectedInterval, to: currentTime)!
-                    if endTime <= now && !isTimeSlotOverlapping(start: currentTime, end: endTime, completedSlots: completedTimeSlots) {
-                        newCards.append(LogCard(startTime: currentTime, endTime: endTime))
-                    }
-                    currentTime = endTime
-                }
+                currentTime = endTime
             }
         }
         
@@ -516,7 +514,7 @@ class SettingsManager: ObservableObject {
     
     private func findLargestPossibleInterval(from startTime: Date, completedSlots: [(start: Date, end: Date)], now: Date) -> Date {
         let calendar = Calendar.current
-        let possibleIntervals = [12, 6, 4, 3, 2, 1] // Ordered from largest to smallest
+        let possibleIntervals = [12, 8, 6, 4, 3, 2, 1]
         
         for intervalHours in possibleIntervals {
             let potentialEndTime = calendar.date(byAdding: .hour, value: intervalHours, to: startTime)!

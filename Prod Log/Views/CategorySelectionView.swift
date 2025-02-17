@@ -95,6 +95,11 @@ struct CategorySelectionView: View {
             // Calculate and save points
             let points = settingsManager.calculatePoints(for: updatedCard)
             settingsManager.savePoints(points, for: updatedCard.startTime, categories: categoryPercentages)
+            
+            // Force a refresh of the log cards
+            DispatchQueue.main.async {
+                logCards = settingsManager.generateLogCards()
+            }
         }
         dismiss()
     }
