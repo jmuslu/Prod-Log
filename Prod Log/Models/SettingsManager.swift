@@ -108,11 +108,23 @@ class SettingsManager: ObservableObject {
         if timeInterval == Self.autoInterval {
             // For auto mode, find the next possible interval
             let completedTimeSlots = getAllCompletedCards()
+                .filter { $0.startTime >= calendar.startOfDay(for: now) } // Only consider today's cards
                 .map { (start: $0.startTime, end: $0.endTime) }
             
-            // Find the next possible interval from now
-            let nextPossibleEnd = findLargestPossibleInterval(from: now, completedSlots: completedTimeSlots, now: now.addingTimeInterval(3600))
-            return nextPossibleEnd
+            // First, check if we're currently in a time slot
+            if let currentSlot = getCurrentTimeSlot() {
+                // If we're in a slot, the next slot should start at the end of the current one
+                return currentSlot.end
+            }
+            
+            // If we're not in a slot, find the next clean hour boundary
+            let nextHour = calendar.date(
+                bySetting: .minute,
+                value: 0,
+                of: calendar.date(byAdding: .hour, value: 1, to: now) ?? now
+            ) ?? now
+            
+            return nextHour
         } else {
             // Original fixed interval logic
             let currentHour = calendar.component(.hour, from: now)
@@ -586,12 +598,17 @@ class SettingsManager: ObservableObject {
             if timeInterval == Self.autoInterval {
                 // Auto mode: Find the largest possible interval
                 let endTime = findLargestPossibleInterval(from: currentTime, completedSlots: completedTimeSlots, now: now)
-                if endTime <= now && !isTimeSlotOverlapping(start: currentTime, end: endTime, completedSlots: completedTimeSlots) {
-                    newCards.append(LogCard(startTime: currentTime, endTime: endTime))
+                
+                // Only add the card if it's a valid time slot
+                if endTime > currentTime && endTime <= now {
+                    // Check if this slot would be valid
+                    if !isTimeSlotOverlapping(start: currentTime, end: endTime, completedSlots: completedTimeSlots) {
+                        newCards.append(LogCard(startTime: currentTime, endTime: endTime))
+                    }
                 }
                 currentTime = endTime
             } else {
-                // Fixed interval mode (simplified)
+                // Fixed interval mode remains unchanged
                 let intervalHours = Int(timeInterval)
                 let endTime = calendar.date(byAdding: .hour, value: intervalHours, to: currentTime)!
                 
@@ -612,15 +629,52 @@ class SettingsManager: ObservableObject {
         // Ensure we're working with clean hour boundaries
         let roundedStartTime = calendar.date(bySetting: .minute, value: 0, of: startTime)!
         
+        // Find any existing completed slots that start at our start time
+        let existingSlots = completedSlots.filter { slot in
+            calendar.isDate(slot.start, equalTo: roundedStartTime, toGranularity: .hour)
+        }
+        
+        if !existingSlots.isEmpty {
+            // If we have existing slots, use their end time as our constraint
+            let latestEnd = existingSlots.map { $0.end }.max()!
+            return latestEnd
+        }
+        
+        // Check each possible interval
         for intervalHours in possibleIntervals {
             let potentialEndTime = calendar.date(byAdding: .hour, value: intervalHours, to: roundedStartTime)!
             
-            if !isTimeSlotOverlapping(start: roundedStartTime, end: potentialEndTime, completedSlots: completedSlots) && potentialEndTime <= now {
+            // Don't go beyond the current time for historical slots
+            if potentialEndTime > now {
+                continue
+            }
+            
+            // Check if this interval would overlap with any completed slots
+            let wouldOverlap = completedSlots.contains { slot in
+                // Exclude exact matches at start or end
+                if calendar.isDate(slot.start, equalTo: roundedStartTime, toGranularity: .hour) ||
+                   calendar.isDate(slot.end, equalTo: potentialEndTime, toGranularity: .hour) {
+                    return false
+                }
+                // Check for any other overlap
+                return !(potentialEndTime <= slot.start || roundedStartTime >= slot.end)
+            }
+            
+            if !wouldOverlap {
                 return potentialEndTime
             }
         }
         
-        // If no larger interval works, return one hour from the start time
+        // If no larger interval works, find the next completed slot
+        let nextCompletedSlot = completedSlots
+            .filter { $0.start > roundedStartTime }
+            .min(by: { $0.start < $1.start })
+        
+        if let nextSlot = nextCompletedSlot {
+            return nextSlot.start
+        }
+        
+        // If nothing else works, return one hour from the start time
         return calendar.date(byAdding: .hour, value: 1, to: roundedStartTime)!
     }
     
@@ -695,24 +749,20 @@ class SettingsManager: ObservableObject {
         
         // Only schedule if the next slot is in the future
         guard nextSlot > now else {
-            print("DEBUG: Next slot is in the past: \(nextSlot)")
+            print("DEBUG: Next slot (\(formatTimeRange(start: nextSlot, end: nextSlot))) is in the past")
             return
         }
         
-        print("DEBUG: Scheduling notification for: \(nextSlot)")
+        print("DEBUG: Scheduling notification for next time slot: \(formatTimeRange(start: nextSlot, end: nextSlot))")
         
         let content = UNMutableNotificationContent()
         content.title = "Time to Log Your Activities"
-        content.body = "A new time slot is available for logging"
+        content.body = "A new time slot is available for logging: \(formatTime(nextSlot))"
         content.sound = .default
         
         // Create trigger for exactly at the next slot time
         let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: nextSlot)
-        print("DEBUG: Notification components: \(components)")
-        
-        // Always use calendar trigger to match the logger's timer
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-        print("DEBUG: Using calendar trigger for: \(nextSlot)")
         
         let request = UNNotificationRequest(
             identifier: "logReminder-\(nextSlot.timeIntervalSince1970)",
@@ -722,10 +772,50 @@ class SettingsManager: ObservableObject {
         
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("DEBUG: Error scheduling notification: \(error)")
+                print("DEBUG: Error scheduling card notification for \(self.formatTime(nextSlot)): \(error)")
             } else {
-                print("DEBUG: Successfully scheduled notification")
+                print("DEBUG: Successfully scheduled card notification for \(self.formatTime(nextSlot))")
             }
+        }
+        
+        // If notification mode is set to 'every', schedule the next one too
+        if notificationMode == .every {
+            let futureSlot = getNextTimeSlot(after: nextSlot)
+            if futureSlot > nextSlot {
+                print("DEBUG: Also scheduling future notification for: \(formatTime(futureSlot))")
+                let futureContent = UNMutableNotificationContent()
+                futureContent.title = "Time to Log Your Activities"
+                futureContent.body = "A new time slot is available for logging: \(formatTime(futureSlot))"
+                futureContent.sound = .default
+                
+                let futureComponents = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: futureSlot)
+                let futureTrigger = UNCalendarNotificationTrigger(dateMatching: futureComponents, repeats: false)
+                
+                let futureRequest = UNNotificationRequest(
+                    identifier: "logReminder-\(futureSlot.timeIntervalSince1970)",
+                    content: futureContent,
+                    trigger: futureTrigger
+                )
+                
+                UNUserNotificationCenter.current().add(futureRequest) { error in
+                    if let error = error {
+                        print("DEBUG: Error scheduling future card notification for \(self.formatTime(futureSlot)): \(error)")
+                    } else {
+                        print("DEBUG: Successfully scheduled future card notification for \(self.formatTime(futureSlot))")
+                    }
+                }
+            }
+        }
+    }
+    
+    // Helper function to get the next time slot after a specific date
+    private func getNextTimeSlot(after date: Date) -> Date {
+        let calendar = Calendar.current
+        if timeInterval == Self.autoInterval {
+            return calendar.date(byAdding: .hour, value: 1, to: date) ?? date
+        } else {
+            let intervalHours = Int(timeInterval)
+            return calendar.date(byAdding: .hour, value: intervalHours, to: date) ?? date
         }
     }
     
