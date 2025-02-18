@@ -5,6 +5,9 @@ class SettingsManager: ObservableObject {
     @Published var timeInterval: Double = 3.0 {  // Default value
         didSet {
             UserDefaults.standard.set(timeInterval, forKey: "timeInterval")
+            if notificationsEnabled {
+                scheduleNextNotification()  // Reschedule when interval changes
+            }
         }
     }
     @Published var use24HourTime: Bool = false {
@@ -679,7 +682,10 @@ class SettingsManager: ObservableObject {
     }
     
     func scheduleNextNotification() {
-        guard notificationsEnabled else { return }
+        guard notificationsEnabled else {
+            print("DEBUG: Notifications are disabled")
+            return 
+        }
         
         // Remove existing notifications
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
@@ -688,7 +694,12 @@ class SettingsManager: ObservableObject {
         let now = Date()
         
         // Only schedule if the next slot is in the future
-        guard nextSlot > now else { return }
+        guard nextSlot > now else {
+            print("DEBUG: Next slot is in the past: \(nextSlot)")
+            return
+        }
+        
+        print("DEBUG: Scheduling notification for: \(nextSlot)")
         
         let content = UNMutableNotificationContent()
         content.title = "Time to Log Your Activities"
@@ -697,7 +708,11 @@ class SettingsManager: ObservableObject {
         
         // Create trigger for exactly at the next slot time
         let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: nextSlot)
+        print("DEBUG: Notification components: \(components)")
+        
+        // Always use calendar trigger to match the logger's timer
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        print("DEBUG: Using calendar trigger for: \(nextSlot)")
         
         let request = UNNotificationRequest(
             identifier: "logReminder-\(nextSlot.timeIntervalSince1970)",
@@ -707,7 +722,9 @@ class SettingsManager: ObservableObject {
         
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("Error scheduling notification: \(error)")
+                print("DEBUG: Error scheduling notification: \(error)")
+            } else {
+                print("DEBUG: Successfully scheduled notification")
             }
         }
     }
@@ -721,6 +738,29 @@ class SettingsManager: ObservableObject {
         } else {
             // Turning on notifications
             requestNotificationPermissions()
+        }
+    }
+    
+    func sendTestNotification() {
+        print("DEBUG: Attempting to send test notification")
+        let content = UNMutableNotificationContent()
+        content.title = "Test Notification"
+        content.body = "This is a test notification (should appear in 5 seconds)"
+        content.sound = .default
+        
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "testNotification-\(Date().timeIntervalSince1970)",
+            content: content,
+            trigger: trigger
+        )
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("DEBUG: Error sending test notification: \(error)")
+            } else {
+                print("DEBUG: Test notification scheduled successfully")
+            }
         }
     }
 } 

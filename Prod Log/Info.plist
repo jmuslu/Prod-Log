@@ -6,5 +6,7 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>NSUserNotificationUsageDescription</key>
+	<string>We need to send you notifications to remind you when it's time to log your activities.</string>
 </dict>
 </plist>
