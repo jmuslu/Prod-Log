@@ -55,19 +55,6 @@ class SettingsManager: ObservableObject {
         case every = "every"      // Notification for every card
     }
     
-    @Published var sortMostRecentFirst: Bool = true {
-        didSet {
-            if sortMostRecentFirst != oldValue {  // Only update if actually changed
-                DispatchQueue.main.async {
-                    UserDefaults.standard.set(self.sortMostRecentFirst, forKey: "sortMostRecentFirst")
-                    self.completedCards = self.sortCompletedCards(self.completedCards)
-                    self.saveCompletedCards()
-                    self.objectWillChange.send()
-                }
-            }
-        }
-    }
-    
     init() {
         // Load values from UserDefaults after all properties are initialized
         if UserDefaults.standard.object(forKey: "timeInterval") != nil {
@@ -86,14 +73,6 @@ class SettingsManager: ObservableObject {
         if self.timeInterval == 0 {
             self.timeInterval = 3.0
             UserDefaults.standard.set(self.timeInterval, forKey: "timeInterval")
-        }
-        
-        // Load sort order preference with proper default
-        if let sortValue = UserDefaults.standard.object(forKey: "sortMostRecentFirst") as? Bool {
-            self.sortMostRecentFirst = sortValue
-        } else {
-            self.sortMostRecentFirst = true
-            UserDefaults.standard.set(true, forKey: "sortMostRecentFirst")
         }
         
         // Load other data
@@ -499,12 +478,9 @@ class SettingsManager: ObservableObject {
     }
     
     private func sortCompletedCards(_ cards: [LogCard]) -> [LogCard] {
+        // Always sort most recent first
         cards.sorted { first, second in
-            if sortMostRecentFirst {
-                return first.startTime > second.startTime
-            } else {
-                return first.startTime < second.startTime
-            }
+            first.startTime > second.startTime
         }
     }
     

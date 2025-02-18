@@ -20,16 +20,6 @@ struct SettingsView: View {
                     Toggle("24-Hour Time", isOn: $settingsManager.use24HourTime)
                 }
                 
-                Section(header: Text("Order Settings"), footer: Text("Choose how completed log cards are displayed")) {
-                    Picker("Completed Cards Order", selection: $settingsManager.sortMostRecentFirst) {
-                        Text("Most Recent First")
-                            .tag(true)
-                        Text("Oldest First")
-                            .tag(false)
-                    }
-                    .pickerStyle(.segmented)
-                }
-                
                 Section(header: Text("Categories")) {
                     ForEach(settingsManager.categories) { category in
                         CategoryRow(category: category)
