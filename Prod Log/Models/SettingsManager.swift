@@ -70,32 +70,39 @@ class SettingsManager: ObservableObject {
     func getNextTimeSlot() -> Date {
         let calendar = Calendar.current
         let now = Date()
-        let currentHour = calendar.component(.hour, from: now)
-        let intervalHours = Int(timeInterval)
         
-        // Change to let since it's not mutated
-        let nextSlotHour = ((currentHour / intervalHours) + 1) * intervalHours
-        
-        // If we're in the last slot of the day
-        if nextSlotHour >= 24 {
-            // Get tomorrow's first slot
-            guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) else {
-                return now
+        if timeInterval == Self.autoInterval {
+            // For auto mode, find the next possible interval
+            let completedTimeSlots = getAllCompletedCards()
+                .map { (start: $0.startTime, end: $0.endTime) }
+            
+            // Find the next possible interval from now
+            let nextPossibleEnd = findLargestPossibleInterval(from: now, completedSlots: completedTimeSlots, now: now.addingTimeInterval(3600))
+            return nextPossibleEnd
+        } else {
+            // Original fixed interval logic
+            let currentHour = calendar.component(.hour, from: now)
+            let intervalHours = Int(timeInterval)
+            let nextSlotHour = ((currentHour / intervalHours) + 1) * intervalHours
+            
+            if nextSlotHour >= 24 {
+                guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) else {
+                    return now
+                }
+                var components = calendar.dateComponents([.year, .month, .day], from: tomorrow)
+                components.hour = 0
+                components.minute = 0
+                components.second = 0
+                return calendar.date(from: components) ?? now
             }
-            var components = calendar.dateComponents([.year, .month, .day], from: tomorrow)
-            components.hour = 0
+            
+            var components = calendar.dateComponents([.year, .month, .day], from: now)
+            components.hour = nextSlotHour
             components.minute = 0
             components.second = 0
+            
             return calendar.date(from: components) ?? now
         }
-        
-        // Get today's next slot
-        var components = calendar.dateComponents([.year, .month, .day], from: now)
-        components.hour = nextSlotHour
-        components.minute = 0
-        components.second = 0
-        
-        return calendar.date(from: components) ?? now
     }
     
     func getCurrentTimeSlot() -> (start: Date, end: Date)? {
@@ -428,10 +435,13 @@ class SettingsManager: ObservableObject {
         // Save to UserDefaults
         saveCompletedCards()
         
-        // Add to logged time slots
+        // Add to logged time slots and save
         let timeSlot = TimeSlot(start: card.startTime, end: card.endTime)
         loggedTimeSlots.append(timeSlot)
         saveLoggedTimeSlots()
+        
+        // Force an update notification
+        objectWillChange.send()
     }
     
     func getCompletedCards(for date: Date) -> [LogCard] {
@@ -516,16 +526,19 @@ class SettingsManager: ObservableObject {
         let calendar = Calendar.current
         let possibleIntervals = [12, 8, 6, 4, 3, 2, 1]
         
+        // Ensure we're working with clean hour boundaries
+        let roundedStartTime = calendar.date(bySetting: .minute, value: 0, of: startTime)!
+        
         for intervalHours in possibleIntervals {
-            let potentialEndTime = calendar.date(byAdding: .hour, value: intervalHours, to: startTime)!
+            let potentialEndTime = calendar.date(byAdding: .hour, value: intervalHours, to: roundedStartTime)!
             
-            if !isTimeSlotOverlapping(start: startTime, end: potentialEndTime, completedSlots: completedSlots) && potentialEndTime <= now {
+            if !isTimeSlotOverlapping(start: roundedStartTime, end: potentialEndTime, completedSlots: completedSlots) && potentialEndTime <= now {
                 return potentialEndTime
             }
         }
         
-        // If no larger interval works, return the minimum 1-hour interval
-        return calendar.date(byAdding: .hour, value: 1, to: startTime)!
+        // If no larger interval works, return one hour from the start time
+        return calendar.date(byAdding: .hour, value: 1, to: roundedStartTime)!
     }
     
     private func isTimeSlotOverlapping(start: Date, end: Date, completedSlots: [(start: Date, end: Date)]) -> Bool {
@@ -553,15 +566,9 @@ class SettingsManager: ObservableObject {
             return "\(formatter.string(from: start)) - \(formatter.string(from: end))"
         } else {
             // Different days
-            if calendar.date(byAdding: .day, value: 1, to: startDay) == endDay {
-                // Consecutive days (overnight)
-                return "\(formatter.string(from: start)) - \(formatter.string(from: end)) (overnight)"
-            } else {
-                // Multiple days
-                let dayFormatter = DateFormatter()
-                dayFormatter.dateFormat = "MMM d"
-                return "\(formatter.string(from: start)) \(dayFormatter.string(from: start)) - \(formatter.string(from: end)) \(dayFormatter.string(from: end))"
-            }
+            let dayFormatter = DateFormatter()
+            dayFormatter.dateFormat = "MMM d"
+            return "\(formatter.string(from: start)) \(dayFormatter.string(from: start)) - \(formatter.string(from: end)) \(dayFormatter.string(from: end))"
         }
     }
     
