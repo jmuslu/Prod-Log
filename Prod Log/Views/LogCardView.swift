@@ -12,26 +12,13 @@ struct LogCardView: View {
         let calendar = Calendar.current
         let formatter = DateFormatter()
         
-        let startDay = calendar.startOfDay(for: card.startTime)
-        let endDay = calendar.startOfDay(for: card.endTime)
-        
-        if startDay == endDay {
-            if calendar.isDateInToday(startDay) {
-                return "Today"
-            } else if calendar.isDateInYesterday(startDay) {
-                return "Yesterday"
-            } else {
-                formatter.dateFormat = "MMM d"
-                return formatter.string(from: startDay)
-            }
+        if calendar.isDateInToday(card.startTime) {
+            return "Today"
+        } else if calendar.isDateInYesterday(card.startTime) {
+            return "Yesterday"
         } else {
-            // Spans multiple days
-            if calendar.isDateInToday(endDay) && calendar.isDateInYesterday(startDay) {
-                return "Yesterday - Today"
-            } else {
-                formatter.dateFormat = "MMM d"
-                return "\(formatter.string(from: startDay)) - \(formatter.string(from: endDay))"
-            }
+            formatter.dateFormat = "MMM d"
+            return formatter.string(from: card.startTime)
         }
     }
     

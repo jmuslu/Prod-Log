@@ -207,13 +207,16 @@ class SettingsManager: ObservableObject {
     }
     
     func calculatePoints(for card: LogCard) -> Int {
-        var total = 0
+        let duration = card.endTime.timeIntervalSince(card.startTime) / 60.0 // Duration in minutes
+        
+        var totalPoints = 0
         for (category, percentage) in card.categories {
-            let minutes = timeInterval * 60 // Convert hours to minutes
-            let points = Int(category.pointsPerMinute * minutes * (percentage / 100.0))
-            total += points
+            let categoryMinutes = duration * (percentage / 100.0)
+            let categoryPoints = Int(categoryMinutes * category.pointsPerMinute)
+            totalPoints += categoryPoints
         }
-        return total
+        
+        return max(0, totalPoints) // Ensure we never return negative points
     }
     
     func calculateDailyPoints(for date: Date, from cards: [LogCard]) -> Int {
@@ -263,10 +266,10 @@ class SettingsManager: ObservableObject {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         
-        // Update daily points
+        // Add points to daily total
         dailyPoints[startOfDay, default: 0] += points
         
-        // Update category points using category names as keys
+        // Add points to category totals
         var dayCategories = categoryPoints[startOfDay] ?? [:]
         for (category, percentage) in categories {
             let categoryPoints = Int(Double(points) * (percentage / 100.0))
@@ -435,12 +438,11 @@ class SettingsManager: ObservableObject {
         // Save to UserDefaults
         saveCompletedCards()
         
-        // Add to logged time slots and save
+        // Add to logged time slots
         let timeSlot = TimeSlot(start: card.startTime, end: card.endTime)
         loggedTimeSlots.append(timeSlot)
         saveLoggedTimeSlots()
         
-        // Force an update notification
         objectWillChange.send()
     }
     
@@ -556,20 +558,7 @@ class SettingsManager: ObservableObject {
     func formatTimeRange(start: Date, end: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = getTimeFormatString()
-        
-        let calendar = Calendar.current
-        let startDay = calendar.startOfDay(for: start)
-        let endDay = calendar.startOfDay(for: end)
-        
-        if startDay == endDay {
-            // Same day
-            return "\(formatter.string(from: start)) - \(formatter.string(from: end))"
-        } else {
-            // Different days
-            let dayFormatter = DateFormatter()
-            dayFormatter.dateFormat = "MMM d"
-            return "\(formatter.string(from: start)) \(dayFormatter.string(from: start)) - \(formatter.string(from: end)) \(dayFormatter.string(from: end))"
-        }
+        return "\(formatter.string(from: start)) - \(formatter.string(from: end))"
     }
     
     // Add a helper method for formatting single times
