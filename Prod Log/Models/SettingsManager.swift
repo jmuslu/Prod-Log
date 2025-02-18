@@ -2,8 +2,16 @@ import SwiftUI
 import UserNotifications
 
 class SettingsManager: ObservableObject {
-    @Published var timeInterval: Double = 3.0  // Default value
-    @Published var use24HourTime: Bool = false
+    @Published var timeInterval: Double = 3.0 {  // Default value
+        didSet {
+            UserDefaults.standard.set(timeInterval, forKey: "timeInterval")
+        }
+    }
+    @Published var use24HourTime: Bool = false {
+        didSet {
+            UserDefaults.standard.set(use24HourTime, forKey: "use24HourTime")
+        }
+    }
     @Published var categories: [Category] = []
     @Published private var dailyPoints: [Date: Int] = [:]
     @Published private var categoryPoints: [Date: [String: Int]] = [:]
@@ -36,11 +44,9 @@ class SettingsManager: ObservableObject {
     @Published var notificationsEnabled: Bool = false {
         didSet {
             DispatchQueue.main.async {
-                // Only update UserDefaults, don't request permissions here
                 UserDefaults.standard.set(self.notificationsEnabled, forKey: "notificationsEnabled")
                 
                 if self.notificationsEnabled {
-                    // Don't request permissions in didSet
                     self.scheduleNextNotification()
                 } else {
                     UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
@@ -48,7 +54,11 @@ class SettingsManager: ObservableObject {
             }
         }
     }
-    @Published var notificationMode: NotificationMode = .single
+    @Published var notificationMode: NotificationMode = .single {
+        didSet {
+            UserDefaults.standard.set(notificationMode.rawValue, forKey: "notificationMode")
+        }
+    }
     
     public enum NotificationMode: String, CaseIterable {
         case single = "single"    // Only one notification until app is opened
@@ -57,12 +67,17 @@ class SettingsManager: ObservableObject {
     
     init() {
         // Load values from UserDefaults after all properties are initialized
-        if UserDefaults.standard.object(forKey: "timeInterval") != nil {
-            self.timeInterval = UserDefaults.standard.double(forKey: "timeInterval")
+        if let savedInterval = UserDefaults.standard.object(forKey: "timeInterval") as? Double {
+            self.timeInterval = savedInterval
         }
         
-        self.use24HourTime = UserDefaults.standard.bool(forKey: "use24HourTime")
-        self.notificationsEnabled = UserDefaults.standard.bool(forKey: "notificationsEnabled")
+        if let savedUse24Hour = UserDefaults.standard.object(forKey: "use24HourTime") as? Bool {
+            self.use24HourTime = savedUse24Hour
+        }
+        
+        if let savedNotificationsEnabled = UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool {
+            self.notificationsEnabled = savedNotificationsEnabled
+        }
         
         if let modeString = UserDefaults.standard.string(forKey: "notificationMode"),
            let mode = NotificationMode(rawValue: modeString) {
