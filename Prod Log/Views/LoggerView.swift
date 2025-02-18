@@ -92,9 +92,9 @@ struct LoggerView: View {
         let now = Date()
         let thirtySixHoursAgo = calendar.date(byAdding: .hour, value: -36, to: now)!
         
+        // Just filter by time and use the pre-sorted cards
         return settingsManager.getAllCompletedCards()
             .filter { $0.startTime >= thirtySixHoursAgo }
-            .sorted { $0.startTime > $1.startTime }
     }
     
     private func isCardInCurrentOrFutureSlot(_ card: LogCard) -> Bool {

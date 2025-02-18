@@ -1,27 +1,12 @@
 import SwiftUI
+import UserNotifications
 
 class SettingsManager: ObservableObject {
-    @Published var timeInterval: Double {
-        didSet {
-            UserDefaults.standard.set(timeInterval, forKey: "timeInterval")
-        }
-    }
-    @Published var use24HourTime: Bool {
-        didSet {
-            UserDefaults.standard.set(use24HourTime, forKey: "use24HourTime")
-        }
-    }
-    @Published var categories: [Category]
-    @Published private var dailyPoints: [Date: Int] {
-        didSet {
-            saveDailyPoints()
-        }
-    }
-    @Published private var categoryPoints: [Date: [String: Int]] {
-        didSet {
-            saveCategoryPoints()
-        }
-    }
+    @Published var timeInterval: Double = 3.0  // Default value
+    @Published var use24HourTime: Bool = false
+    @Published var categories: [Category] = []
+    @Published private var dailyPoints: [Date: Int] = [:]
+    @Published private var categoryPoints: [Date: [String: Int]] = [:]
     
     static let autoInterval: Double = -1  // Special value to indicate auto mode
     let availableIntervals = [-1.0, 1.0, 2.0, 3.0, 4.0, 6.0, 12.0]  // Add auto option (-1)
@@ -45,21 +30,73 @@ class SettingsManager: ObservableObject {
         Category(name: "Work", color: .green, pointsPerMinute: 5, isDefault: true),
         Category(name: "Physical Activity", color: .orange, pointsPerMinute: 5, isDefault: true),
         Category(name: "Relax", color: .purple, pointsPerMinute: 5, isDefault: true),
-        Category(name: "Learning", color: .red, pointsPerMinute: 5, isDefault: true)
+        Category(name: "Commute", color: .red, pointsPerMinute: 5, isDefault: true)
     ]
     
+    @Published var notificationsEnabled: Bool = false {
+        didSet {
+            DispatchQueue.main.async {
+                // Only update UserDefaults, don't request permissions here
+                UserDefaults.standard.set(self.notificationsEnabled, forKey: "notificationsEnabled")
+                
+                if self.notificationsEnabled {
+                    // Don't request permissions in didSet
+                    self.scheduleNextNotification()
+                } else {
+                    UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+                }
+            }
+        }
+    }
+    @Published var notificationMode: NotificationMode = .single
+    
+    public enum NotificationMode: String, CaseIterable {
+        case single = "single"    // Only one notification until app is opened
+        case every = "every"      // Notification for every card
+    }
+    
+    @Published var sortMostRecentFirst: Bool = true {
+        didSet {
+            if sortMostRecentFirst != oldValue {  // Only update if actually changed
+                DispatchQueue.main.async {
+                    UserDefaults.standard.set(self.sortMostRecentFirst, forKey: "sortMostRecentFirst")
+                    self.completedCards = self.sortCompletedCards(self.completedCards)
+                    self.saveCompletedCards()
+                    self.objectWillChange.send()
+                }
+            }
+        }
+    }
+    
     init() {
-        self.categories = []
-        self.dailyPoints = [:]
-        self.categoryPoints = [:]
-        self.timeInterval = UserDefaults.standard.double(forKey: "timeInterval")
-        self.use24HourTime = UserDefaults.standard.bool(forKey: "use24HourTime")
+        // Load values from UserDefaults after all properties are initialized
+        if UserDefaults.standard.object(forKey: "timeInterval") != nil {
+            self.timeInterval = UserDefaults.standard.double(forKey: "timeInterval")
+        }
         
+        self.use24HourTime = UserDefaults.standard.bool(forKey: "use24HourTime")
+        self.notificationsEnabled = UserDefaults.standard.bool(forKey: "notificationsEnabled")
+        
+        if let modeString = UserDefaults.standard.string(forKey: "notificationMode"),
+           let mode = NotificationMode(rawValue: modeString) {
+            self.notificationMode = mode
+        }
+        
+        // Set default time interval if needed
         if self.timeInterval == 0 {
             self.timeInterval = 3.0
             UserDefaults.standard.set(self.timeInterval, forKey: "timeInterval")
         }
         
+        // Load sort order preference with proper default
+        if let sortValue = UserDefaults.standard.object(forKey: "sortMostRecentFirst") as? Bool {
+            self.sortMostRecentFirst = sortValue
+        } else {
+            self.sortMostRecentFirst = true
+            UserDefaults.standard.set(true, forKey: "sortMostRecentFirst")
+        }
+        
+        // Load other data
         loadCategories()
         loadDailyPoints()
         loadCategoryPoints()
@@ -266,20 +303,26 @@ class SettingsManager: ObservableObject {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         
-        // Add points to daily total
-        dailyPoints[startOfDay, default: 0] += points
-        
-        // Add points to category totals
-        var dayCategories = categoryPoints[startOfDay] ?? [:]
-        for (category, percentage) in categories {
-            let categoryPoints = Int(Double(points) * (percentage / 100.0))
-            dayCategories[category.name, default: 0] += categoryPoints
+        // Batch all updates together
+        DispatchQueue.main.async {
+            // Update daily points
+            self.dailyPoints[startOfDay] = (self.dailyPoints[startOfDay] ?? 0) + points
+            
+            // Update category points
+            var updatedCategoryPoints = self.categoryPoints[startOfDay] ?? [:]
+            for (category, percentage) in categories {
+                let categoryPoints = Int(Double(points) * (percentage / 100.0))
+                updatedCategoryPoints[category.name] = (updatedCategoryPoints[category.name] ?? 0) + categoryPoints
+            }
+            self.categoryPoints[startOfDay] = updatedCategoryPoints
+            
+            // Save changes in a single batch
+            self.saveDailyPoints()
+            self.saveCategoryPoints()
+            
+            // Notify of changes once
+            self.objectWillChange.send()
         }
-        categoryPoints[startOfDay] = dayCategories
-        
-        saveDailyPoints()
-        saveCategoryPoints()
-        objectWillChange.send()
     }
     
     func getPoints(for date: Date) -> Int {
@@ -288,18 +331,41 @@ class SettingsManager: ObservableObject {
         return dailyPoints[startOfDay] ?? 0
     }
     
-    func getCategoryPoints(for date: Date) -> [Category: Int] {
+    func getDetailedPoints(for date: Date) -> (daily: Int, category: [String: Int]) {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
-        let stringPoints = categoryPoints[startOfDay] ?? [:]
+        return (
+            daily: dailyPoints[startOfDay] ?? 0,
+            category: categoryPoints[startOfDay] ?? [:]
+        )
+    }
+    
+    func getCategoryPoints(for date: Date) -> [(Category, Int)] {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let pointsDict = categoryPoints[startOfDay] ?? [:]
         
-        var result: [Category: Int] = [:]
-        for category in categories {
-            if let points = stringPoints[category.name] {
-                result[category] = points
+        // Convert string-based dictionary to array of category-point pairs
+        return categories
+            .filter { category in
+                // Only include active categories or recently deleted ones
+                if let deletedDate = category.deletedDate {
+                    return deletedDate > date
+                }
+                return true
             }
-        }
-        return result
+            .compactMap { category in
+                if let points = pointsDict[category.name] {
+                    return (category, points)
+                }
+                return nil
+            }
+    }
+    
+    private func getCategoryPointsDict(for date: Date) -> [String: Int] {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        return categoryPoints[startOfDay] ?? [:]
     }
     
     func isTimeSlotLogged(start: Date, end: Date) -> Bool {
@@ -322,10 +388,10 @@ class SettingsManager: ObservableObject {
     func resetTodayPoints() {
         let calendar = Calendar.current
         let now = Date()
-        let thirtySixHoursAgo = calendar.date(byAdding: .hour, value: -36, to: now)!
+        let fortyEightHoursAgo = calendar.date(byAdding: .hour, value: -48, to: now)!
         
-        // Remove points and completed cards for the entire 36-hour window
-        let startOfWindow = calendar.startOfDay(for: thirtySixHoursAgo)
+        // Remove points and completed cards for the entire 48-hour window
+        let startOfWindow = calendar.startOfDay(for: fortyEightHoursAgo)
         
         // Clear points for all affected days
         var currentDate = startOfWindow
@@ -338,12 +404,12 @@ class SettingsManager: ObservableObject {
         
         // Clear completed cards within the window
         completedCards.removeAll { card in
-            card.startTime >= thirtySixHoursAgo
+            card.startTime >= fortyEightHoursAgo
         }
         
         // Remove logged time slots within the window
         loggedTimeSlots = loggedTimeSlots.filter { slot in
-            slot.start < thirtySixHoursAgo
+            slot.start < fortyEightHoursAgo
         }
         
         // Save all changes
@@ -371,8 +437,8 @@ class SettingsManager: ObservableObject {
     }
     
     private func saveDailyPoints() {
-        if let encoded = try? JSONEncoder().encode(dailyPoints) {
-            UserDefaults.standard.set(encoded, forKey: "dailyPoints")
+        if let data = try? JSONEncoder().encode(dailyPoints) {
+            UserDefaults.standard.set(data, forKey: "dailyPoints")
         }
     }
     
@@ -384,8 +450,8 @@ class SettingsManager: ObservableObject {
     }
     
     private func saveCategoryPoints() {
-        if let encoded = try? JSONEncoder().encode(categoryPoints) {
-            UserDefaults.standard.set(encoded, forKey: "categoryPoints")
+        if let data = try? JSONEncoder().encode(categoryPoints) {
+            UserDefaults.standard.set(data, forKey: "categoryPoints")
         }
     }
     
@@ -410,15 +476,35 @@ class SettingsManager: ObservableObject {
     }
     
     private func loadCompletedCards() {
-        if let data = UserDefaults.standard.data(forKey: "completedCards"),
-           let decoded = try? JSONDecoder().decode([LogCard].self, from: data) {
-            completedCards = decoded
+        if let data = UserDefaults.standard.data(forKey: "completedCards") {
+            do {
+                let decoder = JSONDecoder()
+                completedCards = try decoder.decode([LogCard].self, from: data)
+                completedCards = sortCompletedCards(completedCards)
+            } catch {
+                print("Error decoding completed cards: \(error)")
+                completedCards = []
+            }
         }
     }
     
     private func saveCompletedCards() {
-        if let encoded = try? JSONEncoder().encode(completedCards) {
-            UserDefaults.standard.set(encoded, forKey: "completedCards")
+        do {
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(completedCards)
+            UserDefaults.standard.set(data, forKey: "completedCards")
+        } catch {
+            print("Error encoding completed cards: \(error)")
+        }
+    }
+    
+    private func sortCompletedCards(_ cards: [LogCard]) -> [LogCard] {
+        cards.sorted { first, second in
+            if sortMostRecentFirst {
+                return first.startTime > second.startTime
+            } else {
+                return first.startTime < second.startTime
+            }
         }
     }
     
@@ -429,13 +515,8 @@ class SettingsManager: ObservableObject {
             return overlap
         }
         
-        // Add the new card
         completedCards.append(card)
-        
-        // Sort cards by start time
-        completedCards.sort { $0.startTime > $1.startTime }
-        
-        // Save to UserDefaults
+        completedCards = sortCompletedCards(completedCards)
         saveCompletedCards()
         
         // Add to logged time slots
@@ -443,6 +524,12 @@ class SettingsManager: ObservableObject {
         loggedTimeSlots.append(timeSlot)
         saveLoggedTimeSlots()
         
+        // Schedule next notification if enabled
+        if notificationsEnabled {
+            scheduleNextNotification()
+        }
+        
+        // Notify observers of the change
         objectWillChange.send()
     }
     
@@ -454,7 +541,7 @@ class SettingsManager: ObservableObject {
     }
     
     func getAllCompletedCards() -> [LogCard] {
-        return completedCards.sorted { $0.startTime > $1.startTime }
+        return sortCompletedCards(completedCards)
     }
     
     func clearCompletedCards(since date: Date) {
@@ -566,5 +653,83 @@ class SettingsManager: ObservableObject {
         let formatter = DateFormatter()
         formatter.dateFormat = getTimeFormatString()
         return formatter.string(from: date)
+    }
+    
+    func requestNotificationPermissions() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            switch settings.authorizationStatus {
+            case .notDetermined:
+                UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                    DispatchQueue.main.async {
+                        if granted {
+                            self.notificationsEnabled = true
+                            self.scheduleNextNotification()
+                        } else {
+                            self.notificationsEnabled = false
+                        }
+                    }
+                }
+            case .authorized:
+                DispatchQueue.main.async {
+                    if self.notificationsEnabled {
+                        self.scheduleNextNotification()
+                    }
+                }
+            case .denied:
+                DispatchQueue.main.async {
+                    self.notificationsEnabled = false
+                }
+            default:
+                DispatchQueue.main.async {
+                    self.notificationsEnabled = false
+                }
+            }
+        }
+    }
+    
+    func scheduleNextNotification() {
+        guard notificationsEnabled else { return }
+        
+        // Remove existing notifications
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        
+        let nextSlot = getNextTimeSlot()
+        let now = Date()
+        
+        // Only schedule if the next slot is in the future
+        guard nextSlot > now else { return }
+        
+        let content = UNMutableNotificationContent()
+        content.title = "Time to Log Your Activities"
+        content.body = "A new time slot is available for logging"
+        content.sound = .default
+        
+        // Create trigger for exactly at the next slot time
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: nextSlot)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        
+        let request = UNNotificationRequest(
+            identifier: "logReminder-\(nextSlot.timeIntervalSince1970)",
+            content: content,
+            trigger: trigger
+        )
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Error scheduling notification: \(error)")
+            }
+        }
+    }
+    
+    // Add a function to toggle notifications
+    func toggleNotifications() {
+        if notificationsEnabled {
+            // Turning off notifications
+            notificationsEnabled = false
+            UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        } else {
+            // Turning on notifications
+            requestNotificationPermissions()
+        }
     }
 } 

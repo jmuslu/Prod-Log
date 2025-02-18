@@ -20,6 +20,16 @@ struct SettingsView: View {
                     Toggle("24-Hour Time", isOn: $settingsManager.use24HourTime)
                 }
                 
+                Section(header: Text("Order Settings"), footer: Text("Choose how completed log cards are displayed")) {
+                    Picker("Completed Cards Order", selection: $settingsManager.sortMostRecentFirst) {
+                        Text("Most Recent First")
+                            .tag(true)
+                        Text("Oldest First")
+                            .tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                }
+                
                 Section(header: Text("Categories")) {
                     ForEach(settingsManager.categories) { category in
                         CategoryRow(category: category)
@@ -56,9 +66,28 @@ struct SettingsView: View {
                         HStack {
                             Image(systemName: "arrow.counterclockwise")
                                 .foregroundColor(.red)
-                            Text("Reset Today's Logs")
+                            Text("Reset Recent Logs")
                                 .foregroundColor(.red)
                         }
+                    }
+                }
+                
+                Section(header: Text("Notifications")) {
+                    Toggle("Enable Notifications", isOn: $settingsManager.notificationsEnabled)
+                    
+                    if settingsManager.notificationsEnabled {
+                        Picker("Notification Mode", selection: $settingsManager.notificationMode) {
+                            Text("Single Notification")
+                                .tag(SettingsManager.NotificationMode.single)
+                            Text("Every Log Card")
+                                .tag(SettingsManager.NotificationMode.every)
+                        }
+                        .pickerStyle(.segmented)
+                        
+                        Text(getNotificationModeDescription())
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 4)
                     }
                 }
             }
@@ -75,6 +104,15 @@ struct SettingsView: View {
             } message: {
                 Text("This will clear all logged activities and bring back all log cards for the last 36 hours. This action cannot be undone.")
             }
+        }
+    }
+    
+    private func getNotificationModeDescription() -> String {
+        switch settingsManager.notificationMode {
+        case .single:
+            return "Send one notification until you open the app"
+        case .every:
+            return "Send a notification for every new log card"
         }
     }
 }
