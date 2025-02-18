@@ -12,7 +12,7 @@ struct OnboardingView: View {
                 .font(.system(size: 60))
                 .foregroundColor(.accentColor)
             
-            Text("Welcome to ProdLog")
+            Text("Welcome to Productivity Logger")
                 .font(.title)
                 .bold()
             
