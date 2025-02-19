@@ -24,11 +24,6 @@
       "filename" : "AppIcon@2x~ipad.png",
       "idiom" : "ipad",
       "scale" : "2x"
-    },
-    {
-      "filename" : "AppIcon@3x 1.png",
-      "idiom" : "ios-marketing",
-      "scale" : "1x"
     }
   ],
   "info" : {
