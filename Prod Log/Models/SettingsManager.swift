@@ -69,32 +69,27 @@ class SettingsManager: ObservableObject {
     }
     
     init() {
-        // Load values from UserDefaults after all properties are initialized
-        if let savedInterval = UserDefaults.standard.object(forKey: "timeInterval") as? Double {
-            self.timeInterval = savedInterval
+        // Load saved settings
+        timeInterval = UserDefaults.standard.double(forKey: "timeInterval")
+        if timeInterval == 0 { timeInterval = 6.0 } // Changed default to 6.0
+        
+        use24HourTime = UserDefaults.standard.bool(forKey: "use24HourTime")
+        notificationsEnabled = UserDefaults.standard.bool(forKey: "notificationsEnabled")
+        
+        if let mode = UserDefaults.standard.string(forKey: "notificationMode") {
+            notificationMode = NotificationMode(rawValue: mode) ?? .single
         }
         
-        if let savedUse24Hour = UserDefaults.standard.object(forKey: "use24HourTime") as? Bool {
-            self.use24HourTime = savedUse24Hour
-        }
-        
-        if let savedNotificationsEnabled = UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool {
-            self.notificationsEnabled = savedNotificationsEnabled
-        }
-        
-        if let modeString = UserDefaults.standard.string(forKey: "notificationMode"),
-           let mode = NotificationMode(rawValue: modeString) {
-            self.notificationMode = mode
-        }
-        
-        // Set default time interval if needed
-        if self.timeInterval == 0 {
-            self.timeInterval = 3.0
-            UserDefaults.standard.set(self.timeInterval, forKey: "timeInterval")
-        }
-        
-        // Load other data
+        // Load categories first
         loadCategories()
+        
+        // If no categories exist, set defaults BEFORE loading other data
+        if categories.isEmpty {
+            categories = Category.defaultCategories
+            saveCategories() // Save immediately
+        }
+        
+        // Then load the rest of the data
         loadDailyPoints()
         loadCategoryPoints()
         loadLoggedTimeSlots()
@@ -312,24 +307,32 @@ class SettingsManager: ObservableObject {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         
-        // Batch all updates together
         DispatchQueue.main.async {
             // Update daily points
             self.dailyPoints[startOfDay] = (self.dailyPoints[startOfDay] ?? 0) + points
             
             // Update category points
             var updatedCategoryPoints = self.categoryPoints[startOfDay] ?? [:]
-            for (category, percentage) in categories {
-                let categoryPoints = Int(Double(points) * (percentage / 100.0))
-                updatedCategoryPoints[category.name] = (updatedCategoryPoints[category.name] ?? 0) + categoryPoints
-            }
-            self.categoryPoints[startOfDay] = updatedCategoryPoints
+            var remainingPoints = points
             
-            // Save changes in a single batch
+            // Sort categories to ensure consistent distribution
+            let sortedCategories = categories.sorted { $0.key.name < $1.key.name }
+            
+            // Handle all but the last category
+            for (index, (category, percentage)) in sortedCategories.enumerated() {
+                if index == sortedCategories.count - 1 {
+                    // Last category gets remaining points to avoid rounding errors
+                    updatedCategoryPoints[category.name] = (updatedCategoryPoints[category.name] ?? 0) + remainingPoints
+                } else {
+                    let categoryPoints = Int(Double(points) * (percentage / 100.0))
+                    updatedCategoryPoints[category.name] = (updatedCategoryPoints[category.name] ?? 0) + categoryPoints
+                    remainingPoints -= categoryPoints
+                }
+            }
+            
+            self.categoryPoints[startOfDay] = updatedCategoryPoints
             self.saveDailyPoints()
             self.saveCategoryPoints()
-            
-            // Notify of changes once
             self.objectWillChange.send()
         }
     }
