@@ -314,19 +314,24 @@ class SettingsManager: ObservableObject {
             // Update category points
             var updatedCategoryPoints = self.categoryPoints[startOfDay] ?? [:]
             var remainingPoints = points
+            var totalPercentage: Double = 0
             
             // Sort categories to ensure consistent distribution
             let sortedCategories = categories.sorted { $0.key.name < $1.key.name }
             
-            // Handle all but the last category
+            // Calculate total percentage to handle any rounding issues
+            totalPercentage = sortedCategories.reduce(0) { $0 + $1.value }
+            
+            // Handle all categories
             for (index, (category, percentage)) in sortedCategories.enumerated() {
                 if index == sortedCategories.count - 1 {
-                    // Last category gets remaining points to avoid rounding errors
+                    // Last category gets remaining points
                     updatedCategoryPoints[category.name] = (updatedCategoryPoints[category.name] ?? 0) + remainingPoints
                 } else {
-                    let categoryPoints = Int(Double(points) * (percentage / 100.0))
-                    updatedCategoryPoints[category.name] = (updatedCategoryPoints[category.name] ?? 0) + categoryPoints
-                    remainingPoints -= categoryPoints
+                    // Calculate exact points based on percentage of total
+                    let exactPoints = Int(round(Double(points) * (percentage / totalPercentage)))
+                    updatedCategoryPoints[category.name] = (updatedCategoryPoints[category.name] ?? 0) + exactPoints
+                    remainingPoints -= exactPoints
                 }
             }
             
