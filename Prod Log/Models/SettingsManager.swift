@@ -317,7 +317,34 @@ class SettingsManager: ObservableObject {
     func savePoints(_ points: Int, for date: Date, categories: [Category: Double]) {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
         
+        // Find the completed card that matches this time slot
+        if let card = completedCards.first(where: { $0.startTime == date }) {
+            let totalDuration = card.endTime.timeIntervalSince(card.startTime)
+            let startToMidnight = endOfDay.timeIntervalSince(card.startTime)
+            
+            // If the card spans midnight
+            if card.startTime < endOfDay && card.endTime > endOfDay {
+                // Calculate proportion of points for each day
+                let firstDayRatio = startToMidnight / totalDuration
+                let firstDayPoints = Int(round(Double(points) * firstDayRatio))
+                let secondDayPoints = points - firstDayPoints
+                
+                // Save points for the first day
+                savePointsForDay(firstDayPoints, startOfDay: startOfDay, categories: categories)
+                
+                // Save points for the second day
+                let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+                savePointsForDay(secondDayPoints, startOfDay: nextDay, categories: categories)
+            } else {
+                // If the card doesn't span midnight, save points normally
+                savePointsForDay(points, startOfDay: startOfDay, categories: categories)
+            }
+        }
+    }
+    
+    private func savePointsForDay(_ points: Int, startOfDay: Date, categories: [Category: Double]) {
         DispatchQueue.main.async {
             // Update total daily points
             self.dailyPoints[startOfDay] = (self.dailyPoints[startOfDay] ?? 0) + points
@@ -334,10 +361,8 @@ class SettingsManager: ObservableObject {
             for (index, category) in sortedCategories.enumerated() {
                 let percentage = categories[category] ?? 0
                 if index == sortedCategories.count - 1 {
-                    // Last category gets remaining points
                     updatedCategoryPoints[category.name] = (updatedCategoryPoints[category.name] ?? 0) + remainingPoints
                 } else {
-                    // Calculate exact points with rounding
                     let exactPoints = Int(round(Double(points) * (percentage / totalPercentage)))
                     updatedCategoryPoints[category.name] = (updatedCategoryPoints[category.name] ?? 0) + exactPoints
                     remainingPoints -= exactPoints
