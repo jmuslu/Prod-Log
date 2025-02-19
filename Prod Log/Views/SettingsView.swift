@@ -81,13 +81,15 @@ struct SettingsView: View {
                     }
                 }
                 
-                #if DEBUG
-                Section("Debug") {
-                    NavigationLink("Notification Testing") {
-                        NotificationDebugView()
-                    }
-                }
-                #endif
+                
+                // UNCOMMENT IF DOING NOTIFACTION TESTING
+//                #if DEBUG
+//                Section("Debug") {
+//                    NavigationLink("Notification Testing") {
+//                        NotificationDebugView()
+//                    }
+//                }
+//                #endif
             }
             .navigationTitle("Settings")
             .sheet(isPresented: $showingCategorySheet) {
