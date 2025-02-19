@@ -159,7 +159,7 @@ struct TimeIntervalPicker: View {
     
     private var intervalText: String {
         if selection == -1 {
-            return "Automatic intervals (max card sizes)"
+            return "Automatic intervals (dynamic)"
         } else {
             return "\(selection) hour\(selection == 1 ? "" : "s") between log cards"
         }
