@@ -19,11 +19,13 @@ struct Category: Identifiable, Codable, Hashable {
     
     static let defaultCategories = [
         Category(name: "Sleep", color: .blue, pointsPerMinute: 5, isDefault: true),
-        Category(name: "Work", color: .purple, pointsPerMinute: 5, isDefault: true),
-        Category(name: "Physical Activity", color: .green, pointsPerMinute: 5, isDefault: true),
-        Category(name: "Relax", color: .orange, pointsPerMinute: 5, isDefault: true),
-        Category(name: "Communte", color: .teal, pointsPerMinute: 5, isDefault: true)
+        Category(name: "Work", color: .green, pointsPerMinute: 5, isDefault: true),
+        Category(name: "Physical Activity", color: .orange, pointsPerMinute: 5, isDefault: true),
+        Category(name: "Relax", color: .purple, pointsPerMinute: 5, isDefault: true),
+        Category(name: "Commute", color: .red, pointsPerMinute: 5, isDefault: true)
     ]
+    
+    
     
     // Add computed property to always return integer points
     var pointsPerMinuteInt: Int {
