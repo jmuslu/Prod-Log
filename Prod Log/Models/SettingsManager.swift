@@ -249,15 +249,15 @@ class SettingsManager: ObservableObject {
     
     func calculatePoints(for card: LogCard) -> Int {
         let duration = card.endTime.timeIntervalSince(card.startTime) / 60.0 // Duration in minutes
-        
         var totalPoints = 0
+        
         for (category, percentage) in card.categories {
             let categoryMinutes = duration * (percentage / 100.0)
-            let categoryPoints = Int(categoryMinutes * category.pointsPerMinute)
+            let categoryPoints = Int(round(categoryMinutes * category.pointsPerMinute))
             totalPoints += categoryPoints
         }
         
-        return max(0, totalPoints) // Ensure we never return negative points
+        return totalPoints
     }
     
     func calculateDailyPoints(for date: Date, from cards: [LogCard]) -> Int {
@@ -308,24 +308,25 @@ class SettingsManager: ObservableObject {
         let startOfDay = calendar.startOfDay(for: date)
         
         DispatchQueue.main.async {
-            // Update daily points
+            // Update total daily points
             self.dailyPoints[startOfDay] = (self.dailyPoints[startOfDay] ?? 0) + points
             
             // Update category points
             var updatedCategoryPoints = self.categoryPoints[startOfDay] ?? [:]
-            var totalPercentage: Double = categories.values.reduce(0, +)
+            let totalPercentage = categories.values.reduce(0, +)
             var remainingPoints = points
             
             // Sort categories for consistent distribution
-            let sortedCategories = categories.sorted { $0.key.name < $1.key.name }
+            let sortedCategories = Array(categories.keys).sorted(by: { $0.name < $1.name })
             
-            // Handle all but the last category
-            for (index, (category, percentage)) in sortedCategories.enumerated() {
+            // Calculate points for each category
+            for (index, category) in sortedCategories.enumerated() {
+                let percentage = categories[category] ?? 0
                 if index == sortedCategories.count - 1 {
-                    // Last category gets remaining points to avoid rounding errors
+                    // Last category gets remaining points
                     updatedCategoryPoints[category.name] = (updatedCategoryPoints[category.name] ?? 0) + remainingPoints
                 } else {
-                    // Calculate exact points based on percentage
+                    // Calculate exact points with rounding
                     let exactPoints = Int(round(Double(points) * (percentage / totalPercentage)))
                     updatedCategoryPoints[category.name] = (updatedCategoryPoints[category.name] ?? 0) + exactPoints
                     remainingPoints -= exactPoints
