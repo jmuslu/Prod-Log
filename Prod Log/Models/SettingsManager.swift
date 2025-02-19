@@ -94,6 +94,17 @@ class SettingsManager: ObservableObject {
         loadCategoryPoints()
         loadLoggedTimeSlots()
         loadCompletedCards()
+        
+        // Request notification permissions if enabled
+        if notificationsEnabled {
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
+                if !granted || error != nil {
+                    DispatchQueue.main.async {
+                        self.notificationsEnabled = false
+                    }
+                }
+            }
+        }
     }
     
     func getNextTimeSlot() -> Date {
